@@ -2,8 +2,8 @@ import { useState } from 'react'
 import { Package, Truck, Store, ShoppingCart, Pill } from 'lucide-react'
 import './Login.css'
 
-const Login = ({ onLogin }) => {
-  const [selectedType, setSelectedType] = useState('')
+const Login = ({ onLogin, initialType }) => {
+  const [selectedType, setSelectedType] = useState(initialType || '')
 
   const userTypes = [
     { type: 'supplier', label: 'Supplier', icon: Package, description: 'Manage pharmaceutical products and supply chain' },
