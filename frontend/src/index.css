@@ -1,0 +1,259 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background: #0a0a0a;
+  overflow-x: hidden;
+}
+
+code {
+  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
+    monospace;
+}
+
+/* Custom Brand Colors */
+:root {
+  --brand-green: #22c55e;
+  --brand-green-dark: #16a34a;
+  --brand-green-light: #4ade80;
+  --brand-blue: #3b82f6;
+  --brand-purple: #8b5cf6;
+  --brand-orange: #f59e0b;
+}
+
+/* Advanced Animations */
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-20px); }
+}
+
+@keyframes floatReverse {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(20px); }
+}
+
+@keyframes pulseGlow {
+  0%, 100% { 
+    box-shadow: 0 0 5px var(--brand-green), 0 0 10px var(--brand-green), 0 0 15px var(--brand-green);
+  }
+  50% { 
+    box-shadow: 0 0 10px var(--brand-green), 0 0 20px var(--brand-green), 0 0 30px var(--brand-green);
+  }
+}
+
+@keyframes shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+@keyframes slideIn {
+  from { 
+    opacity: 0; 
+    transform: translateX(-50px); 
+  }
+  to { 
+    opacity: 1; 
+    transform: translateX(0); 
+  }
+}
+
+@keyframes fadeInUp {
+  from { 
+    opacity: 0; 
+    transform: translateY(30px); 
+  }
+  to { 
+    opacity: 1; 
+    transform: translateY(0); 
+  }
+}
+
+@keyframes rotate3D {
+  0% { transform: rotateX(0deg) rotateY(0deg) rotateZ(0deg); }
+  25% { transform: rotateX(10deg) rotateY(90deg) rotateZ(5deg); }
+  50% { transform: rotateX(0deg) rotateY(180deg) rotateZ(0deg); }
+  75% { transform: rotateX(-10deg) rotateY(270deg) rotateZ(-5deg); }
+  100% { transform: rotateX(0deg) rotateY(360deg) rotateZ(0deg); }
+}
+
+@keyframes morphing {
+  0%, 100% { border-radius: 20px; }
+  25% { border-radius: 50px; }
+  50% { border-radius: 10px; }
+  75% { border-radius: 40px; }
+}
+
+@keyframes particleFloat {
+  0%, 100% { 
+    transform: translateY(0px) translateX(0px) rotate(0deg); 
+    opacity: 0.7;
+  }
+  25% { 
+    transform: translateY(-30px) translateX(10px) rotate(90deg); 
+    opacity: 1;
+  }
+  50% { 
+    transform: translateY(-60px) translateX(-10px) rotate(180deg); 
+    opacity: 0.5;
+  }
+  75% { 
+    transform: translateY(-30px) translateX(15px) rotate(270deg); 
+    opacity: 0.8;
+  }
+}
+
+@keyframes wave {
+  0%, 100% { transform: scaleY(1); }
+  50% { transform: scaleY(1.5); }
+}
+
+@keyframes neonGlow {
+  0%, 100% { 
+    text-shadow: 0 0 5px var(--brand-green), 0 0 10px var(--brand-green), 0 0 15px var(--brand-green);
+  }
+  50% { 
+    text-shadow: 0 0 10px var(--brand-green), 0 0 20px var(--brand-green), 0 0 30px var(--brand-green), 0 0 40px var(--brand-green);
+  }
+}
+
+@keyframes matrixRain {
+  0% { transform: translateY(-100vh); opacity: 0; }
+  10% { opacity: 1; }
+  90% { opacity: 1; }
+  100% { transform: translateY(100vh); opacity: 0; }
+}
+
+/* Animation Classes */
+.animation-float { animation: float 6s ease-in-out infinite; }
+.animation-floatReverse { animation: floatReverse 8s ease-in-out infinite; }
+.animation-pulseGlow { animation: pulseGlow 2s ease-in-out infinite; }
+.animation-shimmer { animation: shimmer 2s linear infinite; }
+.animation-slideIn { animation: slideIn 0.8s ease-out; }
+.animation-fadeInUp { animation: fadeInUp 0.8s ease-out; }
+.animation-rotate3D { animation: rotate3D 10s linear infinite; }
+.animation-morphing { animation: morphing 4s ease-in-out infinite; }
+.animation-particleFloat { animation: particleFloat 8s ease-in-out infinite; }
+.animation-wave { animation: wave 2s ease-in-out infinite; }
+.animation-neonGlow { animation: neonGlow 3s ease-in-out infinite; }
+
+/* 3D Transform Classes */
+.transform-3d { transform-style: preserve-3d; }
+.perspective-1000 { perspective: 1000px; }
+.rotate-x-15 { transform: rotateX(15deg); }
+.rotate-y-15 { transform: rotateY(15deg); }
+.rotate-z-15 { transform: rotateZ(15deg); }
+
+/* Hover Effects */
+.hover-lift {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.hover-lift:hover {
+  transform: translateY(-10px) scale(1.05);
+  box-shadow: 0 20px 40px rgba(34, 197, 94, 0.3);
+}
+
+.hover-glow {
+  transition: all 0.3s ease;
+}
+.hover-glow:hover {
+  box-shadow: 0 0 20px var(--brand-green), 0 0 40px var(--brand-green);
+}
+
+.hover-rotate {
+  transition: transform 0.3s ease;
+}
+.hover-rotate:hover {
+  transform: rotateY(180deg);
+}
+
+.hover-scale {
+  transition: transform 0.3s ease;
+}
+.hover-scale:hover {
+  transform: scale(1.1);
+}
+
+/* Cursor Effects */
+.cursor-glow {
+  position: relative;
+  overflow: hidden;
+}
+.cursor-glow::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(34, 197, 94, 0.4), transparent);
+  transition: left 0.5s;
+}
+.cursor-glow:hover::before {
+  left: 100%;
+}
+
+/* Particle System */
+.particle {
+  position: absolute;
+  width: 4px;
+  height: 4px;
+  background: var(--brand-green);
+  border-radius: 50%;
+  animation: particleFloat 6s linear infinite;
+}
+
+/* Matrix Rain Effect */
+.matrix-rain {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: -1;
+}
+
+.matrix-char {
+  position: absolute;
+  color: var(--brand-green);
+  font-family: 'Courier New', monospace;
+  font-size: 14px;
+  animation: matrixRain 3s linear infinite;
+}
+
+/* Glassmorphism */
+.glass {
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+/* Gradient Text */
+.gradient-text {
+  background: linear-gradient(45deg, var(--brand-green), var(--brand-blue), var(--brand-purple));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #0a0a0a;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--brand-green);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--brand-green-light);
+}
