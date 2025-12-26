@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTheme } from '../contexts/ThemeContext';
 
 interface RoleCredentials {
 	id: string;
@@ -12,6 +13,7 @@ interface RoleCredentials {
 }
 
 const RoleLogin: React.FC = () => {
+	const { isDarkMode } = useTheme();
 	const [selectedRole, setSelectedRole] = useState<string>('');
 	const [email, setEmail] = useState('');
 	const [password, setPassword] = useState('');
@@ -96,7 +98,10 @@ const RoleLogin: React.FC = () => {
 	};
 
 	return (
-		<div className="min-h-screen bg-[#0a0a0a] text-white flex items-center justify-center px-4">
+		<div className="min-h-screen flex items-center justify-center px-4 transition-colors duration-300" style={{
+			backgroundColor: 'var(--bg-primary)',
+			color: 'var(--text-primary)'
+		}}>
 			<div className="w-full max-w-4xl">
 				<div className="text-center mb-8">
 					<h1 className="text-3xl font-bold mb-2"><span className="text-brand-green">Role-Based</span> Login</h1>

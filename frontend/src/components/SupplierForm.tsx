@@ -1,4 +1,6 @@
 import React, { useState } from 'react';
+import { useWeb3 } from '../contexts/Web3Context';
+import { ethers } from 'ethers';
 
 interface RawMaterialFormData {
 	materialName: string;
@@ -16,6 +18,7 @@ interface RawMaterialFormData {
 }
 
 const SupplierForm: React.FC = () => {
+	const { contract, isConnected, connectWallet, account } = useWeb3();
 	const [formData, setFormData] = useState<RawMaterialFormData>({
 		materialName: '',
 		supplierName: '',
@@ -33,54 +36,102 @@ const SupplierForm: React.FC = () => {
 
 	const [isSubmitting, setIsSubmitting] = useState(false);
 	const [submitted, setSubmitted] = useState(false);
+	const [error, setError] = useState<string | null>(null);
+	const [txHash, setTxHash] = useState<string | null>(null);
 
 	const handleSubmit = async (e: React.FormEvent) => {
 		e.preventDefault();
+		setError(null);
+		setTxHash(null);
+
+		if (!isConnected || !contract) {
+			try {
+				await connectWallet();
+				return;
+			} catch (err: any) {
+				setError(err.message || 'Please connect your MetaMask wallet');
+				return;
+			}
+		}
+
 		setIsSubmitting(true);
 		
-		// Simulate API call
-		await new Promise(resolve => setTimeout(resolve, 2000));
-		
-		// Add to recent tasks
-		const newTask = {
-			type: 'raw_material' as const,
-			title: `Raw Material Added: ${formData.materialName}`,
-			description: `Added ${formData.quantity} ${formData.unit} of ${formData.materialName} from ${formData.supplierName}`,
-			status: 'completed' as const,
-			user: 'Supplier',
-			details: `Batch: ${formData.batchNumber} | Certificate: ${formData.qualityCertificate}`
-		};
-		
-		// Save to localStorage
-		const existingTasks = JSON.parse(localStorage.getItem('pharmaTasks') || '[]');
-		const taskWithId = {
-			...newTask,
-			id: Date.now().toString(),
-			timestamp: new Date().toISOString()
-		};
-		localStorage.setItem('pharmaTasks', JSON.stringify([taskWithId, ...existingTasks]));
-		
-		setIsSubmitting(false);
-		setSubmitted(true);
-		
-		// Reset form after 3 seconds
-		setTimeout(() => {
-			setSubmitted(false);
-			setFormData({
-				materialName: '',
-				supplierName: '',
-				batchNumber: '',
-				supplyDate: '',
-				quantity: '',
-				unit: 'kg',
-				source: '',
-				qualityCertificate: '',
-				storageConditions: '',
-				expiryDate: '',
-				contactPerson: '',
-				phoneNumber: ''
+		try {
+			// Convert batch number to bytes32 for product ID
+			const productId = ethers.id(formData.batchNumber);
+			
+			// Create note with all form data
+			const note = JSON.stringify({
+				supplierName: formData.supplierName,
+				supplyDate: formData.supplyDate,
+				quantity: formData.quantity,
+				unit: formData.unit,
+				source: formData.source,
+				qualityCertificate: formData.qualityCertificate,
+				storageConditions: formData.storageConditions,
+				expiryDate: formData.expiryDate,
+				contactPerson: formData.contactPerson,
+				phoneNumber: formData.phoneNumber
 			});
-		}, 3000);
+
+			// Call blockchain contract
+			const tx = await contract.createProduct(
+				productId,
+				formData.materialName,
+				note
+			);
+
+			setTxHash(tx.hash);
+			
+			// Wait for transaction confirmation
+			await tx.wait();
+			
+			// Add to recent tasks
+			const newTask = {
+				type: 'raw_material' as const,
+				title: `Raw Material Added: ${formData.materialName}`,
+				description: `Added ${formData.quantity} ${formData.unit} of ${formData.materialName} from ${formData.supplierName}`,
+				status: 'completed' as const,
+				user: 'Supplier',
+				details: `Batch: ${formData.batchNumber} | Certificate: ${formData.qualityCertificate} | TX: ${tx.hash.substring(0, 10)}...`
+			};
+			
+			// Save to localStorage
+			const existingTasks = JSON.parse(localStorage.getItem('pharmaTasks') || '[]');
+			const taskWithId = {
+				...newTask,
+				id: Date.now().toString(),
+				timestamp: new Date().toISOString()
+			};
+			localStorage.setItem('pharmaTasks', JSON.stringify([taskWithId, ...existingTasks]));
+			
+			setIsSubmitting(false);
+			setSubmitted(true);
+			
+			// Reset form after 3 seconds
+			setTimeout(() => {
+				setSubmitted(false);
+				setFormData({
+					materialName: '',
+					supplierName: '',
+					batchNumber: '',
+					supplyDate: '',
+					quantity: '',
+					unit: 'kg',
+					source: '',
+					qualityCertificate: '',
+					storageConditions: '',
+					expiryDate: '',
+					contactPerson: '',
+					phoneNumber: ''
+				});
+				setTxHash(null);
+			}, 3000);
+		} catch (err: any) {
+			console.error('Error creating product:', err);
+			setError(err.message || 'Failed to create product on blockchain. Make sure you have the Supplier role assigned.');
+			setIsSubmitting(false);
+		}
 	};
 
 	const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
@@ -98,6 +149,9 @@ const SupplierForm: React.FC = () => {
 				</div>
 				<h3 className="text-2xl font-bold text-brand-green mb-4 animation-neonGlow">Raw Material Successfully Added!</h3>
 				<p className="text-white/80 text-lg mb-6">Your raw material has been registered in the blockchain network with cryptographic proof.</p>
+				{txHash && (
+					<p className="text-brand-blue text-sm mb-4 break-all">TX: {txHash}</p>
+				)}
 				<div className="bg-gradient-to-r from-brand-green/20 to-brand-blue/20 border border-brand-green/30 rounded-xl p-4">
 					<p className="text-brand-green font-semibold">✓ Blockchain transaction confirmed</p>
 					<p className="text-brand-green font-semibold">✓ Quality certificate verified</p>
@@ -119,6 +173,28 @@ const SupplierForm: React.FC = () => {
 				</div>
 			</div>
 
+			{!isConnected && (
+				<div className="mb-6 p-4 bg-yellow-500/20 border border-yellow-500 rounded-xl">
+					<p className="text-yellow-500 mb-2">⚠️ Please connect your MetaMask wallet to continue</p>
+					<button
+						type="button"
+						onClick={connectWallet}
+						className="bg-brand-green text-black px-4 py-2 rounded-lg font-semibold hover:brightness-110"
+					>
+						Connect Wallet
+					</button>
+				</div>
+			)}
+			{isConnected && account && (
+				<div className="mb-6 p-4 bg-brand-green/20 border border-brand-green rounded-xl">
+					<p className="text-brand-green text-sm">Connected: {account.substring(0, 6)}...{account.substring(account.length - 4)}</p>
+				</div>
+			)}
+			{error && (
+				<div className="mb-6 p-4 bg-red-500/20 border border-red-500 rounded-xl">
+					<p className="text-red-500">{error}</p>
+				</div>
+			)}
 			<form onSubmit={handleSubmit} className="space-y-8">
 				<div className="grid md:grid-cols-2 gap-8">
 					<div className="group">

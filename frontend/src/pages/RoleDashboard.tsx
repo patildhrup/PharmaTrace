@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { useTheme } from '../contexts/ThemeContext';
 import ManufacturerForm from '../components/ManufacturerForm';
 import SupplierForm from '../components/SupplierForm';
 import DistributorForm from '../components/DistributorForm';
@@ -18,6 +19,7 @@ interface RoleData {
 }
 
 const RoleDashboard: React.FC = () => {
+	const { isDarkMode } = useTheme();
 	const { roleId } = useParams<{ roleId: string }>();
 	const navigate = useNavigate();
     const [roleData, setRoleData] = useState<RoleData | null>(null);
@@ -146,11 +148,17 @@ const RoleDashboard: React.FC = () => {
 	}, [roleId, navigate]);
 
 	if (!roleData) {
-		return <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center text-white">Loading...</div>;
+		return <div className="min-h-screen flex items-center justify-center transition-colors duration-300" style={{
+			backgroundColor: 'var(--bg-primary)',
+			color: 'var(--text-primary)'
+		}}>Loading...</div>;
 	}
 
 	return (
-		<div className="min-h-screen bg-[#0a0a0a] text-white relative overflow-hidden">
+		<div className="min-h-screen relative overflow-hidden transition-colors duration-300" style={{
+			backgroundColor: 'var(--bg-primary)',
+			color: 'var(--text-primary)'
+		}}>
 			{/* Animated Background Particles */}
             <div className="fixed inset-0 pointer-events-none">
                 {Array.from({ length: 30 }).map((_, i) => (

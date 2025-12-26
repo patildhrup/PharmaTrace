@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from 'react';
+import { useTheme } from '../contexts/ThemeContext';
 import PharmaTraceLogo from '../components/PharmaTraceLogo';
 
 const Landing: React.FC = () => {
+    const { isDarkMode } = useTheme();
     const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
 
     useEffect(() => {
@@ -14,7 +16,10 @@ const Landing: React.FC = () => {
     }, []);
 
 	return (
-		<div className="min-h-screen bg-[#0a0a0a] text-white relative overflow-hidden">
+		<div className="min-h-screen relative overflow-hidden transition-colors duration-300" style={{
+			backgroundColor: 'var(--bg-primary)',
+			color: 'var(--text-primary)'
+		}}>
 			{/* Animated Background Particles */}
             <div className="fixed inset-0 pointer-events-none">
                 {Array.from({ length: 50 }).map((_, i) => (

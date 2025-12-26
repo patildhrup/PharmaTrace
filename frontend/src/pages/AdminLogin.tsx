@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTheme } from '../contexts/ThemeContext';
 
 const AdminLogin: React.FC = () => {
+	const { isDarkMode } = useTheme();
 	const [email, setEmail] = useState('');
 	const [password, setPassword] = useState('');
 	const [error, setError] = useState('');
@@ -21,8 +23,14 @@ const AdminLogin: React.FC = () => {
 	};
 
 	return (
-		<div className="min-h-screen bg-[#0a0a0a] text-white flex items-center justify-center px-4">
-			<div className="w-full max-w-md bg-[#111] border border-[rgba(34,197,94,0.2)] rounded-xl p-8 shadow-xl">
+		<div className="min-h-screen flex items-center justify-center px-4 transition-colors duration-300" style={{
+			backgroundColor: 'var(--bg-primary)',
+			color: 'var(--text-primary)'
+		}}>
+			<div className="w-full max-w-md border rounded-xl p-8 shadow-xl transition-colors duration-300" style={{
+				backgroundColor: 'var(--bg-secondary)',
+				borderColor: isDarkMode ? 'rgba(34,197,94,0.2)' : 'rgba(34,197,94,0.3)'
+			}}>
 				<div className="text-center mb-6">
 					<div className="w-16 h-16 bg-brand-green rounded-full flex items-center justify-center mx-auto mb-4 animation-pulseGlow">
 						<span className="text-2xl">🔐</span>
@@ -53,7 +61,7 @@ const AdminLogin: React.FC = () => {
 						/>
 					</div>
 					{error && <div className="text-red-400 text-sm bg-red-900/20 p-3 rounded-md">{error}</div>}
-					<button type="submit" className="w-full bg-brand-green text-black rounded-md py-2 font-semibold hover:brightness-110 transition animation-pulseGlow">
+					<button type="submit" className="w-full bg-brand-green text-black rounded-md py-2 font-semibold hover:brightness-110 transition">
 						Login to Admin Dashboard
 					</button>
 				</form>

@@ -1,4 +1,6 @@
 import React, { useState } from 'react';
+import { useWeb3 } from '../contexts/Web3Context';
+import { ethers } from 'ethers';
 
 interface TransportFormData {
 	vehicleId: string;
@@ -19,6 +21,9 @@ const TransportForm: React.FC = () => {
 
 	const [isSubmitting, setIsSubmitting] = useState(false);
 	const [submitted, setSubmitted] = useState(false);
+	const { contract, isConnected, connectWallet, account } = useWeb3();
+	const [error, setError] = useState<string | null>(null);
+	const [txHash, setTxHash] = useState<string | null>(null);
 
 	const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
 		setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -26,29 +31,60 @@ const TransportForm: React.FC = () => {
 
 	const handleSubmit = async (e: React.FormEvent) => {
 		e.preventDefault();
+		setError(null);
+		setTxHash(null);
+
+		if (!isConnected || !contract) {
+			try {
+				await connectWallet();
+				return;
+			} catch (err: any) {
+				setError(err.message || 'Please connect your MetaMask wallet');
+				return;
+			}
+		}
+
 		setIsSubmitting(true);
-		await new Promise(r => setTimeout(r, 1200));
+		
+		try {
+			const productId = ethers.id(formData.batchNumber);
+			const note = JSON.stringify({
+				vehicleId: formData.vehicleId,
+				pickupLocation: formData.pickupLocation,
+				dropLocation: formData.dropLocation,
+				departureTime: formData.departureTime
+			});
 
-		const newTask = {
-			type: 'shipment' as const,
-			title: `Shipment Started: ${formData.batchNumber}`,
-			description: `Vehicle ${formData.vehicleId} from ${formData.pickupLocation} to ${formData.dropLocation}`,
-			status: 'in_progress' as const,
-			user: 'Transport',
-			details: `Departure: ${formData.departureTime}`
-		};
-		const existing = JSON.parse(localStorage.getItem('pharmaTasks') || '[]');
-		localStorage.setItem('pharmaTasks', JSON.stringify([
-			{ ...newTask, id: Date.now().toString(), timestamp: new Date().toISOString() },
-			...existing
-		]));
+			const tx = await contract.pickupForTransport(productId, note);
+			setTxHash(tx.hash);
+			await tx.wait();
 
-		setIsSubmitting(false);
-		setSubmitted(true);
-		setTimeout(() => {
-			setSubmitted(false);
-			setFormData({ vehicleId: '', batchNumber: '', pickupLocation: '', dropLocation: '', departureTime: '' });
-		}, 2000);
+			const newTask = {
+				type: 'shipment' as const,
+				title: `Shipment Started: ${formData.batchNumber}`,
+				description: `Vehicle ${formData.vehicleId} from ${formData.pickupLocation} to ${formData.dropLocation}`,
+				status: 'in_progress' as const,
+				user: 'Transport',
+				details: `Departure: ${formData.departureTime} | TX: ${tx.hash.substring(0, 10)}...`
+			};
+			const existing = JSON.parse(localStorage.getItem('pharmaTasks') || '[]');
+			localStorage.setItem('pharmaTasks', JSON.stringify([
+				{ ...newTask, id: Date.now().toString(), timestamp: new Date().toISOString() },
+				...existing
+			]));
+
+			setIsSubmitting(false);
+			setSubmitted(true);
+			setTimeout(() => {
+				setSubmitted(false);
+				setFormData({ vehicleId: '', batchNumber: '', pickupLocation: '', dropLocation: '', departureTime: '' });
+				setTxHash(null);
+			}, 2000);
+		} catch (err: any) {
+			console.error('Error picking up for transport:', err);
+			setError(err.message || 'Failed to record shipment. Make sure the product exists and you have the Transporter role.');
+			setIsSubmitting(false);
+		}
 	};
 
 	if (submitted) {
@@ -56,6 +92,9 @@ const TransportForm: React.FC = () => {
 			<div className="bg-gradient-to-br from-[#111] to-[#0d0d0d] border border-[rgba(34,197,94,0.3)] rounded-2xl p-8 text-center animation-fadeInUp">
 				<h3 className="text-2xl font-bold text-brand-green mb-2">Shipment Recorded ✅</h3>
 				<p className="text-white/70">Activity added to recent activities.</p>
+				{txHash && (
+					<p className="text-brand-blue text-sm mt-2 break-all">TX: {txHash}</p>
+				)}
 			</div>
 		);
 	}
@@ -70,6 +109,22 @@ const TransportForm: React.FC = () => {
 				</div>
 			</div>
 
+			{!isConnected && (
+				<div className="mb-6 p-4 bg-yellow-500/20 border border-yellow-500 rounded-xl">
+					<p className="text-yellow-500 mb-2">⚠️ Please connect your MetaMask wallet</p>
+					<button type="button" onClick={connectWallet} className="bg-brand-green text-black px-4 py-2 rounded-lg font-semibold">Connect Wallet</button>
+				</div>
+			)}
+			{isConnected && account && (
+				<div className="mb-6 p-4 bg-brand-green/20 border border-brand-green rounded-xl">
+					<p className="text-brand-green text-sm">Connected: {account.substring(0, 6)}...{account.substring(account.length - 4)}</p>
+				</div>
+			)}
+			{error && (
+				<div className="mb-6 p-4 bg-red-500/20 border border-red-500 rounded-xl">
+					<p className="text-red-500">{error}</p>
+				</div>
+			)}
 			<form onSubmit={handleSubmit} className="space-y-6">
 				<div className="grid md:grid-cols-2 gap-6">
 					<div>

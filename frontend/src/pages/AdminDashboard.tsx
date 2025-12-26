@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTheme } from '../contexts/ThemeContext';
 
 interface Role {
 	id: string;
@@ -10,6 +11,7 @@ interface Role {
 }
 
 const AdminDashboard: React.FC = () => {
+	const { isDarkMode } = useTheme();
 	// const [selectedRole, setSelectedRole] = useState<string | null>(null);
 	const navigate = useNavigate();
 
@@ -68,7 +70,10 @@ const AdminDashboard: React.FC = () => {
 	};
 
 	return (
-		<div className="min-h-screen bg-[#0a0a0a] text-white relative overflow-hidden">
+		<div className="min-h-screen relative overflow-hidden transition-colors duration-300" style={{
+			backgroundColor: 'var(--bg-primary)',
+			color: 'var(--text-primary)'
+		}}>
 			{/* Animated Background Particles */}
 			<div className="fixed inset-0 pointer-events-none">
 				{Array.from({ length: 25 }).map((_, i) => (

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useTheme } from '../contexts/ThemeContext';
 
 interface Task {
 	id: string;
@@ -12,6 +13,7 @@ interface Task {
 }
 
 const RecentTasks: React.FC = () => {
+	const { isDarkMode } = useTheme();
 	const [tasks, setTasks] = useState<Task[]>([]);
 	const [filter, setFilter] = useState<'all' | 'completed' | 'in_progress' | 'pending'>('all');
 
@@ -106,15 +108,19 @@ const RecentTasks: React.FC = () => {
 					<div className="w-20 h-20 bg-gradient-to-br from-brand-green/20 to-brand-blue/20 rounded-full flex items-center justify-center mx-auto mb-4 animation-float">
 						<span className="text-4xl">📝</span>
 					</div>
-					<h3 className="text-xl font-semibold text-white mb-2">No Activities Yet</h3>
-					<p className="text-white/70">Start by adding raw materials or creating drug batches to see activities here.</p>
+					<h3 className="text-xl font-semibold mb-2" style={{color: 'var(--text-primary)'}}>No Activities Yet</h3>
+					<p style={{color: 'var(--text-secondary)'}}>Start by adding raw materials or creating drug batches to see activities here.</p>
 				</div>
 			) : (
 				<div className="space-y-4">
 					{filteredTasks.map((task) => (
 						<div
 							key={task.id}
-							className={`group bg-gradient-to-r from-[#0d0d0d] to-[#111] border rounded-xl p-6 hover-lift transition-all duration-300 ${getStatusBg(task.status)}`}
+							className={`group border rounded-xl p-6 hover-lift transition-all duration-300 ${getStatusBg(task.status)}`}
+							style={{
+								background: `linear-gradient(90deg, var(--bg-primary), var(--bg-secondary))`,
+								borderColor: 'var(--border-color)'
+							}}
 						>
 							<div className="flex items-start justify-between">
 								<div className="flex items-start space-x-4">
@@ -123,18 +129,18 @@ const RecentTasks: React.FC = () => {
 									</div>
 									<div className="flex-1">
 										<div className="flex items-center space-x-3 mb-2">
-											<h3 className="text-lg font-semibold text-white group-hover:text-brand-green transition-colors duration-300">
+											<h3 className="text-lg font-semibold group-hover:text-brand-green transition-colors duration-300" style={{color: 'var(--text-primary)'}}>
 												{task.title}
 											</h3>
 											<span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(task.status)} bg-current/20`}>
 												{task.status.replace('_', ' ')}
 											</span>
 										</div>
-										<p className="text-white/70 mb-2">{task.description}</p>
+										<p className="mb-2" style={{color: 'var(--text-secondary)'}}>{task.description}</p>
 										{task.details && (
 											<p className="text-brand-green text-sm font-medium">{task.details}</p>
 										)}
-										<div className="flex items-center space-x-4 mt-3 text-sm text-white/50">
+										<div className="flex items-center space-x-4 mt-3 text-sm" style={{color: 'var(--text-secondary)'}}>
 											<span>👤 {task.user}</span>
 											<span>🕒 {task.timestamp.toLocaleString()}</span>
 										</div>

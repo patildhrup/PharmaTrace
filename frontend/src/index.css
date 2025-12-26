@@ -9,8 +9,10 @@ body {
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background: #0a0a0a;
+  background: var(--bg-primary);
+  color: var(--text-primary);
   overflow-x: hidden;
+  transition: background-color 0.3s ease, color 0.3s ease;
 }
 
 code {
@@ -26,6 +28,27 @@ code {
   --brand-blue: #3b82f6;
   --brand-purple: #8b5cf6;
   --brand-orange: #f59e0b;
+  --bg-primary: #0a0a0a;
+  --bg-secondary: #141414;
+  --text-primary: #ffffff;
+  --text-secondary: #e5e7eb;
+  --border-color: rgba(34, 197, 94, 0.2);
+}
+
+html.dark {
+  --bg-primary: #0a0a0a;
+  --bg-secondary: #141414;
+  --text-primary: #ffffff;
+  --text-secondary: #e5e7eb;
+  --border-color: rgba(34, 197, 94, 0.2);
+}
+
+html.light {
+  --bg-primary: #ffffff;
+  --bg-secondary: #f3f4f6;
+  --text-primary: #1f2937;
+  --text-secondary: #374151;
+  --border-color: rgba(34, 197, 94, 0.3);
 }
 
 /* Advanced Animations */
@@ -243,12 +266,40 @@ code {
   background-clip: text;
 }
 
+/* Light Mode Overrides */
+html.light {
+  color-scheme: light;
+}
+
+html.light body {
+  background-color: #ffffff;
+  color: #1f2937;
+}
+
+html.light .text-white {
+  color: #1f2937;
+}
+
+html.light .text-white\/80 {
+  color: rgba(31, 41, 55, 0.8);
+}
+
+html.light .text-white\/90 {
+  color: rgba(31, 41, 55, 0.9);
+}
+
+html.light .glass {
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(34, 197, 94, 0.3);
+}
+
 /* Custom Scrollbar */
 ::-webkit-scrollbar {
   width: 8px;
 }
 ::-webkit-scrollbar-track {
-  background: #0a0a0a;
+  background: var(--bg-primary);
 }
 ::-webkit-scrollbar-thumb {
   background: var(--brand-green);
