@@ -14,3 +14,4 @@ export const NETWORK_CONFIG = {
 	rpcUrl: 'http://127.0.0.1:8545',
 };
 
+

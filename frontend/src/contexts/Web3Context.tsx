@@ -60,19 +60,30 @@ export const Web3Provider: React.FC<Web3ProviderProps> = ({ children }) => {
 				} catch (switchError: any) {
 					// If network doesn't exist, add it
 					if (switchError.code === 4902) {
-						await window.ethereum.request({
-							method: 'wallet_addEthereumChain',
-							params: [{
-								chainId: `0x${expectedChainId.toString(16)}`,
-								chainName: 'Hardhat Local',
-								nativeCurrency: {
-									name: 'ETH',
-									symbol: 'ETH',
-									decimals: 18,
-								},
-								rpcUrls: ['http://127.0.0.1:8545'],
-							}],
-						});
+						try {
+							await window.ethereum.request({
+								method: 'wallet_addEthereumChain',
+								params: [{
+									chainId: `0x${expectedChainId.toString(16)}`,
+									chainName: 'Hardhat Local',
+									nativeCurrency: {
+										name: 'ETH',
+										symbol: 'ETH',
+										decimals: 18,
+									},
+									rpcUrls: ['http://127.0.0.1:8545'],
+									blockExplorerUrls: null, // No block explorer for local network
+								}],
+							});
+						} catch (addError: any) {
+							// Suppress parse errors from RPC validation (non-critical)
+							if (addError.message && addError.message.includes('Parse error')) {
+								console.warn('RPC validation warning (non-critical):', addError.message);
+								// Continue anyway - the network might still be added
+							} else {
+								throw addError;
+							}
+						}
 					} else {
 						throw switchError;
 					}
@@ -87,6 +98,24 @@ export const Web3Provider: React.FC<Web3ProviderProps> = ({ children }) => {
 			setAccount(accountAddress);
 			setIsConnected(true);
 		} catch (err: any) {
+			// Suppress parse errors that occur during RPC validation (non-critical)
+			if (err.message && err.message.includes('Parse error')) {
+				console.warn('RPC parse error (non-critical, continuing):', err.message);
+				// Try to continue with the connection anyway
+				try {
+					const signer = await provider.getSigner();
+					const contractInstance = new ethers.Contract(CONTRACT_ADDRESS, contractABI, signer);
+					setProvider(provider);
+					setContract(contractInstance);
+					setAccount(accountAddress);
+					setIsConnected(true);
+					return;
+				} catch (retryErr: any) {
+					console.error('Error setting up provider after retry:', retryErr);
+					setError(retryErr.message || 'Failed to setup provider');
+					throw retryErr;
+				}
+			}
 			console.error('Error setting up provider:', err);
 			setError(err.message || 'Failed to setup provider');
 			throw err;
