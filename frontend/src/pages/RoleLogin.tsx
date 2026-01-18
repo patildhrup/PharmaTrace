@@ -66,16 +66,6 @@ const RoleLogin: React.FC = () => {
 			password: 'retailer123',
 			description: 'Pharmacies, hospitals, and retail outlets'
 		}
-		,
-		{
-			id: 'consumer',
-			name: 'Consumer',
-			icon: '🧑‍⚕️',
-			color: 'from-emerald-500 to-teal-600',
-			email: 'consumer@pharmatrace.com',
-			password: 'consumer123',
-			description: 'Patients verifying safety and origin of their drugs'
-		}
 	];
 
 	const selectedRoleData = roles.find(role => role.id === selectedRole);

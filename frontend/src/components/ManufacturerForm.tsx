@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useTheme } from '../contexts/ThemeContext';
 import { useWeb3 } from '../contexts/Web3Context';
 import { ethers } from 'ethers';
+import { QRCodeSVG } from 'qrcode.react';
 
 interface DrugFormData {
 	drugName: string;
@@ -36,6 +37,7 @@ const ManufacturerForm: React.FC = () => {
 	const [submitted, setSubmitted] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [txHash, setTxHash] = useState<string | null>(null);
+	const [submittedBatchNumber, setSubmittedBatchNumber] = useState<string>('');
 
 	const handleSubmit = async (e: React.FormEvent) => {
 		e.preventDefault();
@@ -99,8 +101,9 @@ const ManufacturerForm: React.FC = () => {
 			
 			setIsSubmitting(false);
 			setSubmitted(true);
+			setSubmittedBatchNumber(formData.batchNumber);
 			
-			// Reset form after 3 seconds
+			// Reset form after 10 seconds (longer to allow QR code viewing)
 			setTimeout(() => {
 				setSubmitted(false);
 				setFormData({
@@ -116,7 +119,8 @@ const ManufacturerForm: React.FC = () => {
 					qualityGrade: 'A'
 				});
 				setTxHash(null);
-			}, 3000);
+				setSubmittedBatchNumber('');
+			}, 10000);
 		} catch (err: any) {
 			console.error('Error manufacturing product:', err);
 			setError(err.message || 'Failed to manufacture product on blockchain. Make sure the product exists and you have the Manufacturer role.');
@@ -132,13 +136,34 @@ const ManufacturerForm: React.FC = () => {
 	};
 
 	if (submitted) {
+		const verifyUrl = `${window.location.origin}/verify/${submittedBatchNumber}`;
+		
 		return (
 			<div className="bg-[#111] border border-[rgba(34,197,94,0.2)] rounded-xl p-8 text-center animation-fadeInUp">
 				<div className="w-16 h-16 bg-brand-green rounded-full flex items-center justify-center mx-auto mb-4 animation-pulseGlow">
 					<span className="text-2xl">✅</span>
 				</div>
 				<h3 className="text-xl font-semibold text-brand-green mb-2">Drug Successfully Manufactured!</h3>
-				<p className="text-white/70">Your drug has been registered in the blockchain network.</p>
+				<p className="text-white/70 mb-6">Your drug has been registered in the blockchain network.</p>
+				
+				{/* QR Code Section */}
+				<div className="bg-[#0d0d0d] border border-[rgba(34,197,94,0.3)] rounded-xl p-6 mb-6">
+					<h4 className="text-lg font-semibold mb-4 text-brand-green">QR Code for Batch Verification</h4>
+					<div className="flex flex-col items-center">
+						<div className="bg-white p-4 rounded-lg mb-4">
+							<QRCodeSVG 
+								value={verifyUrl}
+								size={200}
+								level="H"
+								includeMargin={true}
+							/>
+						</div>
+						<p className="text-white/70 text-sm mb-2">Batch Number: <span className="text-brand-green font-semibold">{submittedBatchNumber}</span></p>
+						<p className="text-white/50 text-xs break-all max-w-md">{verifyUrl}</p>
+						<p className="text-white/60 text-xs mt-3">Consumers can scan this QR code to verify the product</p>
+					</div>
+				</div>
+				
 				{txHash && (
 					<p className="text-brand-blue text-sm mt-2 break-all">TX: {txHash}</p>
 				)}

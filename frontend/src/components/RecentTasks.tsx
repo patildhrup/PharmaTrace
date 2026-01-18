@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useTheme } from '../contexts/ThemeContext';
+import { QRCodeSVG } from 'qrcode.react';
 
 interface Task {
 	id: string;
@@ -16,6 +17,7 @@ const RecentTasks: React.FC = () => {
 	const { isDarkMode } = useTheme();
 	const [tasks, setTasks] = useState<Task[]>([]);
 	const [filter, setFilter] = useState<'all' | 'completed' | 'in_progress' | 'pending'>('all');
+	const [showQRModal, setShowQRModal] = useState<{ batchNumber: string; taskTitle: string } | null>(null);
 
 	useEffect(() => {
 		// Load tasks from localStorage
@@ -72,6 +74,26 @@ const RecentTasks: React.FC = () => {
 	const filteredTasks = tasks.filter(task => 
 		filter === 'all' || task.status === filter
 	);
+
+	// Extract batch number from description
+	const extractBatchNumber = (description: string): string | null => {
+		// Match patterns like "Batch: BATCH_NUMBER", "(Batch: BATCH_NUMBER)", or "Batch: BATCH-NUMBER"
+		// Handles formats like: PHARMA_BATCH_2026_001, PCM-2024-001, etc.
+		const match = description.match(/[Bb]atch:\s*([A-Z0-9_\-]+)/);
+		return match ? match[1] : null;
+	};
+
+	// Check if task has a batch number (for manufacturing tasks)
+	const hasBatchNumber = (task: Task): boolean => {
+		return task.type === 'drug_manufacturing' && extractBatchNumber(task.description) !== null;
+	};
+
+	const handleShowQR = (task: Task) => {
+		const batchNumber = extractBatchNumber(task.description);
+		if (batchNumber) {
+			setShowQRModal({ batchNumber, taskTitle: task.title });
+		}
+	};
 
 	return (
 		<div className="bg-gradient-to-br from-[#111] to-[#0d0d0d] border border-[rgba(34,197,94,0.2)] rounded-2xl p-8 animation-fadeInUp">
@@ -147,8 +169,19 @@ const RecentTasks: React.FC = () => {
 									</div>
 								</div>
 								
-								<div className="opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-									<button className="text-brand-green hover:text-brand-green-light transition-colors duration-300">
+								<div className="flex items-center space-x-2">
+									{hasBatchNumber(task) && (
+										<button
+											onClick={() => handleShowQR(task)}
+											className="text-brand-green hover:text-brand-green-light transition-all duration-300 p-2 rounded-lg hover:bg-brand-green/10 opacity-80 hover:opacity-100"
+											title="View QR Code"
+										>
+											<svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+												<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
+											</svg>
+										</button>
+									)}
+									<button className="text-brand-green hover:text-brand-green-light transition-colors duration-300 opacity-0 group-hover:opacity-100">
 										<svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 											<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
 										</svg>
@@ -157,6 +190,69 @@ const RecentTasks: React.FC = () => {
 							</div>
 						</div>
 					))}
+				</div>
+			)}
+
+			{/* QR Code Modal */}
+			{showQRModal && (
+				<div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" onClick={() => setShowQRModal(null)}>
+					<div 
+						className="bg-[#111] border border-[rgba(34,197,94,0.3)] rounded-xl p-8 max-w-md w-full animation-fadeInUp"
+						onClick={(e) => e.stopPropagation()}
+					>
+						<div className="flex items-center justify-between mb-6">
+							<h3 className="text-xl font-semibold text-brand-green">QR Code for Verification</h3>
+							<button
+								onClick={() => setShowQRModal(null)}
+								className="text-white/70 hover:text-white transition-colors"
+							>
+								<svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+									<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+								</svg>
+							</button>
+						</div>
+						
+						<div className="text-center mb-4">
+							<p className="text-white/70 text-sm mb-2">{showQRModal.taskTitle}</p>
+							<p className="text-white/50 text-xs">Batch: <span className="text-brand-green font-semibold">{showQRModal.batchNumber}</span></p>
+						</div>
+
+						<div className="flex flex-col items-center mb-6">
+							<div className="bg-white p-4 rounded-lg mb-4">
+								<QRCodeSVG 
+									value={`${window.location.origin}/verify/${showQRModal.batchNumber}`}
+									size={200}
+									level="H"
+									includeMargin={true}
+								/>
+							</div>
+							<p className="text-white/50 text-xs break-all max-w-sm text-center">
+								{window.location.origin}/verify/{showQRModal.batchNumber}
+							</p>
+							<p className="text-white/60 text-xs mt-3 text-center">
+								Consumers can scan this QR code to verify the product
+							</p>
+						</div>
+
+						<div className="flex space-x-3">
+							<button
+								onClick={() => {
+									const url = `${window.location.origin}/verify/${showQRModal.batchNumber}`;
+									navigator.clipboard.writeText(url);
+									// You could add a toast notification here
+								}}
+								className="flex-1 bg-brand-green/20 border border-brand-green text-brand-green rounded-lg py-2 font-semibold hover:bg-brand-green/30 transition-colors"
+							>
+								Copy Link
+							</button>
+							<button
+								onClick={() => setShowQRModal(null)}
+								className="flex-1 bg-white/10 border border-white/20 text-white rounded-lg py-2 font-semibold hover:bg-white/20 transition-colors"
+							>
+								Close
+							</button>
+						</div>
+					</div>
 				</div>
 			)}
 		</div>

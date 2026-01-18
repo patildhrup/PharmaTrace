@@ -9,6 +9,7 @@ import AdminLogin from './pages/AdminLogin';
 import AdminDashboard from './pages/AdminDashboard';
 import RoleDashboard from './pages/RoleDashboard';
 import RoleLogin from './pages/RoleLogin';
+import Verify from './pages/Verify';
 
 const App: React.FC = () => {
 	return (
@@ -27,6 +28,7 @@ const App: React.FC = () => {
 							<Route path="/admin-login" element={<AdminLogin />} />
 							<Route path="/admin-dashboard" element={<AdminDashboard />} />
 							<Route path="/role-dashboard/:roleId" element={<RoleDashboard />} />
+							<Route path="/verify/:batchId" element={<Verify />} />
 							{/* Placeholders for additional routes */}
 							<Route path="/features" element={<Landing />} />
 							<Route path="/pricing" element={<Landing />} />
