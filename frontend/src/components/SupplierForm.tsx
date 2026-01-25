@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useWeb3 } from '../contexts/Web3Context';
 import { ethers } from 'ethers';
+import { syncProduct } from '../services/api';
 
 interface RawMaterialFormData {
 	materialName: string;
@@ -85,6 +86,51 @@ const SupplierForm: React.FC = () => {
 			
 			// Wait for transaction confirmation
 			await tx.wait();
+			
+			// Get product info from blockchain to sync to database
+			try {
+				const [name, holder, stage, updatesCount] = await contract.getProduct(productId);
+				const historyLength = await contract.getHistoryLength(productId);
+				const historyArray = [];
+				
+				for (let i = 0; i < Number(historyLength); i++) {
+					const [updater, role, timestamp, note] = await contract.getUpdate(productId, i);
+					historyArray.push({
+						updater,
+						role: Number(role),
+						timestamp: Number(timestamp),
+						note
+					});
+				}
+				
+				// Sync to backend database
+				// Note: Backend accepts additional fields beyond Product interface
+				await syncProduct({
+					batchNumber: formData.batchNumber,
+					productId: productId,
+					name: formData.materialName,
+					currentHolder: holder,
+					stage: Number(stage),
+					history: historyArray,
+					exists: true,
+					quantity: formData.quantity,
+					unit: formData.unit,
+					expiryDate: formData.expiryDate,
+					txHash: tx.hash,
+					// Additional supplier-specific fields (backend will accept these)
+					supplierName: formData.supplierName,
+					supplyDate: formData.supplyDate,
+					source: formData.source,
+					qualityCertificate: formData.qualityCertificate,
+					storageConditions: formData.storageConditions,
+					contactPerson: formData.contactPerson,
+					phoneNumber: formData.phoneNumber
+				} as any);
+				console.log('Product synced to database');
+			} catch (syncErr) {
+				console.error('Failed to sync to database (non-critical):', syncErr);
+				// Don't fail the transaction if sync fails
+			}
 			
 			// Add to recent tasks
 			const newTask = {

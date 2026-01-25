@@ -1,9 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import { ethers } from 'ethers';
-import contractArtifact from '../config/contractABI.json';
+import contractABI from '../config/contractABI.json';
 import { CONTRACT_ADDRESS } from '../config/contractConfig';
-
-const contractABI = contractArtifact.abi;
 
 interface Web3ContextType {
 	account: string | null;
@@ -49,7 +47,7 @@ export const Web3Provider: React.FC<Web3ProviderProps> = ({ children }) => {
 			// Check network (for local Hardhat, chainId should be 31337)
 			const network = await provider.getNetwork();
 			const expectedChainId = BigInt(31337); // Hardhat local network
-			
+
 			if (network.chainId !== expectedChainId) {
 				// Try to switch to local network
 				try {
@@ -171,7 +169,7 @@ export const Web3Provider: React.FC<Web3ProviderProps> = ({ children }) => {
 			const provider = new ethers.BrowserProvider(window.ethereum);
 			// Request account access
 			const accounts = await provider.send('eth_requestAccounts', []);
-			
+
 			if (accounts.length === 0) {
 				throw new Error('No accounts found. Please unlock MetaMask.');
 			}

@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useTheme } from '../contexts/ThemeContext';
 import { QRCodeSVG } from 'qrcode.react';
+import { useWeb3 } from '../contexts/Web3Context';
+import { ethers } from 'ethers';
+import { useParams } from 'react-router-dom';
 
 interface Task {
 	id: string;
@@ -11,13 +14,17 @@ interface Task {
 	timestamp: Date;
 	user: string;
 	details: string;
+	blockchainStatus?: string;
 }
 
 const RecentTasks: React.FC = () => {
 	const { isDarkMode } = useTheme();
+	const { contract, isConnected } = useWeb3();
+	const { roleId } = useParams<{ roleId: string }>();
 	const [tasks, setTasks] = useState<Task[]>([]);
 	const [filter, setFilter] = useState<'all' | 'completed' | 'in_progress' | 'pending'>('all');
 	const [showQRModal, setShowQRModal] = useState<{ batchNumber: string; taskTitle: string } | null>(null);
+	const [isLoadingStatuses, setIsLoadingStatuses] = useState(false);
 
 	useEffect(() => {
 		// Load tasks from localStorage
@@ -30,6 +37,93 @@ const RecentTasks: React.FC = () => {
 			setTasks(parsedTasks);
 		}
 	}, []);
+
+	useEffect(() => {
+		if (isConnected && contract && tasks.length > 0) {
+			updateTaskStatuses();
+		}
+	}, [isConnected, contract, tasks.length]);
+
+	const updateTaskStatuses = async () => {
+		if (isLoadingStatuses || !contract) return;
+		setIsLoadingStatuses(true);
+
+		// Use a local reference for TypeScript type safety
+		const activeContract = contract;
+		const updatedTasks = [...tasks];
+		let changed = false;
+
+		for (let i = 0; i < updatedTasks.length; i++) {
+			const task = updatedTasks[i];
+			const batchNumber = extractBatchNumber(task.description) || extractBatchNumber(task.details);
+			
+			if (batchNumber) {
+				try {
+					const productId = ethers.id(batchNumber);
+					const [name, holder, stage, updatesCount] = await activeContract.getProduct(productId);
+					const currentStage = Number(stage);
+					
+					let newStatus: 'completed' | 'in_progress' | 'pending' = task.status;
+					let statusText = '';
+
+					// Map status based on role and blockchain stage
+					// Role names in roleId: supplier, manufacturer, distributor, transport, retailer
+					if (roleId === 'supplier') {
+						if (currentStage === 0) newStatus = 'pending';
+						else if (currentStage === 3) newStatus = 'in_progress';
+						else if (currentStage >= 1) {
+							newStatus = 'completed';
+							statusText = ' (Delivered to Manufacturer)';
+						}
+					} else if (roleId === 'manufacturer') {
+						if (currentStage === 1) newStatus = 'pending';
+						else if (currentStage === 3) {
+							// Check if it was already manufactured to distinguish from Supplier->Manufacturer leg
+							// For simplicity, we assume if it's on Manufacturer's dashboard, it's their manufactured batch
+							newStatus = 'in_progress';
+						}
+						else if (currentStage >= 2) {
+							newStatus = 'completed';
+							statusText = ' (Delivered to Distributor)';
+						}
+					} else if (roleId === 'distributor') {
+						if (currentStage === 2 || currentStage === 4) newStatus = 'pending';
+						else if (currentStage === 3) newStatus = 'in_progress';
+						else if (currentStage >= 5) {
+							newStatus = 'completed';
+							statusText = ' (Delivered to Retailer)';
+						}
+					} else if (roleId === 'retailer') {
+						if (currentStage === 5) newStatus = 'pending';
+						else if (currentStage === 6) {
+							newStatus = 'completed';
+							statusText = ' (Delivered to Consumer)';
+						}
+					} else if (roleId === 'transport') {
+						if (currentStage === 3) newStatus = 'in_progress';
+						else newStatus = 'completed';
+					}
+
+					if (updatedTasks[i].status !== newStatus || (statusText && !updatedTasks[i].details.includes(statusText))) {
+						updatedTasks[i].status = newStatus;
+						if (statusText && !updatedTasks[i].details.includes(statusText)) {
+							// Only add statusText once
+							const baseDetails = updatedTasks[i].details.split(' (')[0];
+							updatedTasks[i].details = baseDetails + statusText;
+						}
+						changed = true;
+					}
+				} catch (err) {
+					console.error(`Error updating status for batch ${batchNumber}:`, err);
+				}
+			}
+		}
+
+		if (changed) {
+			setTasks(updatedTasks);
+		}
+		setIsLoadingStatuses(false);
+	};
 
 	// Function to add new tasks (for future use)
 	// const addTask = (newTask: Omit<Task, 'id' | 'timestamp'>) => {
@@ -105,6 +199,12 @@ const RecentTasks: React.FC = () => {
 					<div>
 						<h2 className="text-2xl font-bold text-white">Recent Activities</h2>
 						<p className="text-white/70">Track your pharmaceutical supply chain activities</p>
+						{isConnected && (
+							<div className="flex items-center mt-2">
+								<span className="flex h-2 w-2 rounded-full bg-brand-green mr-2 animate-pulse"></span>
+								<span className="text-xs text-brand-green font-medium uppercase tracking-wider">Live Blockchain Sync Active</span>
+							</div>
+						)}
 					</div>
 				</div>
 				
@@ -219,15 +319,15 @@ const RecentTasks: React.FC = () => {
 
 						<div className="flex flex-col items-center mb-6">
 							<div className="bg-white p-4 rounded-lg mb-4">
-								<QRCodeSVG 
-									value={`${window.location.origin}/verify/${showQRModal.batchNumber}`}
-									size={200}
-									level="H"
-									includeMargin={true}
-								/>
+							<QRCodeSVG 
+								value={`${window.location.origin}/verify/${encodeURIComponent(showQRModal.batchNumber)}`}
+								size={200}
+								level="H"
+								includeMargin={true}
+							/>
 							</div>
 							<p className="text-white/50 text-xs break-all max-w-sm text-center">
-								{window.location.origin}/verify/{showQRModal.batchNumber}
+								{window.location.origin}/verify/{encodeURIComponent(showQRModal.batchNumber)}
 							</p>
 							<p className="text-white/60 text-xs mt-3 text-center">
 								Consumers can scan this QR code to verify the product
@@ -237,9 +337,9 @@ const RecentTasks: React.FC = () => {
 						<div className="flex space-x-3">
 							<button
 								onClick={() => {
-									const url = `${window.location.origin}/verify/${showQRModal.batchNumber}`;
+									const url = `${window.location.origin}/verify/${encodeURIComponent(showQRModal.batchNumber)}`;
 									navigator.clipboard.writeText(url);
-									// You could add a toast notification here
+									alert('Link copied to clipboard!');
 								}}
 								className="flex-1 bg-brand-green/20 border border-brand-green text-brand-green rounded-lg py-2 font-semibold hover:bg-brand-green/30 transition-colors"
 							>

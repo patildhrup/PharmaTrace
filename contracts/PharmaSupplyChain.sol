@@ -3,10 +3,11 @@
 pragma solidity ^0.8.19;
 
 /// @title PharmaSupplyChain
-/// @notice Simple supply-chain tracking for pharmaceutical products. Each actor can register and update product state. History is stored on-chain.
+/// @notice Enhanced supply-chain tracking for pharmaceutical products with dynamic status tracking
 contract PharmaSupplyChain {
-    enum Role { None, Supplier, Manufacturer, Distributor, Transporter, Wholesaler, Retailer }
-    enum Stage { Created, Manufactured, WithDistributor, InTransport, WithWholesaler, WithRetailer, Sold }
+    enum Role { None, Supplier, Manufacturer, Distributor, Transporter, Retailer }
+    enum Stage { Created, Manufactured, WithDistributor, InTransport, WithRetailer, Sold }
+    enum BatchStatus { Pending, InProgress, Completed }
 
     struct Update {
         address updater;
@@ -20,6 +21,9 @@ contract PharmaSupplyChain {
         string name;
         address currentHolder;
         Stage stage;
+        BatchStatus status; // Current batch status
+        address currentParticipant; // Current participant handling the batch
+        string currentLocation; // Current location description
         Update[] history;
         bool exists;
     }
@@ -34,6 +38,9 @@ contract PharmaSupplyChain {
     event RoleAssigned(address indexed who, Role role);
     event ProductCreated(bytes32 indexed id, string name, address indexed supplier);
     event ProductUpdated(bytes32 indexed id, Stage stage, address indexed updater);
+    event StatusChanged(bytes32 indexed id, BatchStatus newStatus, address participant, string location);
+    event TransportStarted(bytes32 indexed id, address transporter, string fromLocation, string toLocation);
+    event TransportCompleted(bytes32 indexed id, address transporter, string location);
 
     modifier onlyRole(Role r) {
         require(roles[msg.sender] == r, "Unauthorized role");
@@ -61,6 +68,15 @@ contract PharmaSupplyChain {
         emit RoleAssigned(who, Role.None);
     }
 
+    // ------- Internal status update helper -------
+    function _updateStatus(bytes32 id, BatchStatus newStatus, string memory location) internal {
+        Product storage p = products[id];
+        p.status = newStatus;
+        p.currentParticipant = msg.sender;
+        p.currentLocation = location;
+        emit StatusChanged(id, newStatus, msg.sender, location);
+    }
+
     // ------- Product lifecycle -------
 
     /// @notice Supplier creates a raw-material/product entry
@@ -72,6 +88,9 @@ contract PharmaSupplyChain {
         p.name = name;
         p.currentHolder = msg.sender;
         p.stage = Stage.Created;
+        p.status = BatchStatus.Pending;
+        p.currentParticipant = msg.sender;
+        p.currentLocation = "Supplier Facility";
         p.exists = true;
 
         p.history.push(Update({
@@ -82,6 +101,44 @@ contract PharmaSupplyChain {
         }));
 
         emit ProductCreated(id, name, msg.sender);
+        emit StatusChanged(id, BatchStatus.Pending, msg.sender, "Supplier Facility");
+    }
+
+    /// @notice Transporter picks up product from current location
+    function transporterPickup(bytes32 id, string calldata fromLocation, string calldata toLocation, string calldata note) external onlyRole(Role.Transporter) productExists(id) {
+        Product storage p = products[id];
+        require(p.status == BatchStatus.Pending, "Product not ready for pickup");
+        
+        p.currentHolder = msg.sender;
+        p.stage = Stage.InTransport;
+        _updateStatus(id, BatchStatus.InProgress, string(abi.encodePacked("In Transit: ", fromLocation, " to ", toLocation)));
+        
+        p.history.push(Update({
+            updater: msg.sender,
+            role: Role.Transporter,
+            timestamp: block.timestamp,
+            note: note
+        }));
+        
+        emit TransportStarted(id, msg.sender, fromLocation, toLocation);
+        emit ProductUpdated(id, p.stage, msg.sender);
+    }
+
+    /// @notice Transporter delivers product to next participant
+    function transporterDeliver(bytes32 id, string calldata location, string calldata note) external onlyRole(Role.Transporter) productExists(id) {
+        Product storage p = products[id];
+        require(p.status == BatchStatus.InProgress, "Product not in transit");
+        
+        _updateStatus(id, BatchStatus.Completed, location);
+        
+        p.history.push(Update({
+            updater: msg.sender,
+            role: Role.Transporter,
+            timestamp: block.timestamp,
+            note: note
+        }));
+        
+        emit TransportCompleted(id, msg.sender, location);
     }
 
     /// @notice Manufacturer records manufacturing details and advances stage
@@ -89,64 +146,103 @@ contract PharmaSupplyChain {
         Product storage p = products[id];
         p.currentHolder = msg.sender;
         p.stage = Stage.Manufactured;
-        p.history.push(Update({updater: msg.sender, role: Role.Manufacturer, timestamp: block.timestamp, note: note }));
+        _updateStatus(id, BatchStatus.Pending, "Manufacturing Facility");
+        
+        p.history.push(Update({
+            updater: msg.sender,
+            role: Role.Manufacturer,
+            timestamp: block.timestamp,
+            note: note
+        }));
+        
         emit ProductUpdated(id, p.stage, msg.sender);
     }
 
     /// @notice Distributor receives product
     function receiveByDistributor(bytes32 id, string calldata note) external onlyRole(Role.Distributor) productExists(id) {
         Product storage p = products[id];
+        require(p.status == BatchStatus.Completed, "Product not delivered yet");
+        
         p.currentHolder = msg.sender;
         p.stage = Stage.WithDistributor;
-        p.history.push(Update({updater: msg.sender, role: Role.Distributor, timestamp: block.timestamp, note: note }));
-        emit ProductUpdated(id, p.stage, msg.sender);
-    }
-
-    /// @notice Transporter takes product
-    function pickupForTransport(bytes32 id, string calldata note) external onlyRole(Role.Transporter) productExists(id) {
-        Product storage p = products[id];
-        p.currentHolder = msg.sender;
-        p.stage = Stage.InTransport;
-        p.history.push(Update({updater: msg.sender, role: Role.Transporter, timestamp: block.timestamp, note: note }));
-        emit ProductUpdated(id, p.stage, msg.sender);
-    }
-
-    /// @notice Wholesaler receives product
-    function receiveByWholesaler(bytes32 id, string calldata note) external onlyRole(Role.Wholesaler) productExists(id) {
-        Product storage p = products[id];
-        p.currentHolder = msg.sender;
-        p.stage = Stage.WithWholesaler;
-        p.history.push(Update({updater: msg.sender, role: Role.Wholesaler, timestamp: block.timestamp, note: note }));
+        _updateStatus(id, BatchStatus.Pending, "Distribution Center");
+        
+        p.history.push(Update({
+            updater: msg.sender,
+            role: Role.Distributor,
+            timestamp: block.timestamp,
+            note: note
+        }));
+        
         emit ProductUpdated(id, p.stage, msg.sender);
     }
 
     /// @notice Retailer receives product (final before sold)
     function receiveByRetailer(bytes32 id, string calldata note) external onlyRole(Role.Retailer) productExists(id) {
         Product storage p = products[id];
+        require(p.status == BatchStatus.Completed, "Product not delivered yet");
+        
         p.currentHolder = msg.sender;
         p.stage = Stage.WithRetailer;
-        p.history.push(Update({updater: msg.sender, role: Role.Retailer, timestamp: block.timestamp, note: note }));
+        _updateStatus(id, BatchStatus.Pending, "Retail Pharmacy");
+        
+        p.history.push(Update({
+            updater: msg.sender,
+            role: Role.Retailer,
+            timestamp: block.timestamp,
+            note: note
+        }));
+        
         emit ProductUpdated(id, p.stage, msg.sender);
     }
 
-    /// @notice Mark sold
+    /// @notice Mark sold to consumer
     function markSold(bytes32 id, string calldata note) external onlyRole(Role.Retailer) productExists(id) {
         Product storage p = products[id];
         p.stage = Stage.Sold;
-        p.history.push(Update({updater: msg.sender, role: Role.Retailer, timestamp: block.timestamp, note: note }));
+        _updateStatus(id, BatchStatus.Completed, "Delivered to Consumer");
+        
+        p.history.push(Update({
+            updater: msg.sender,
+            role: Role.Retailer,
+            timestamp: block.timestamp,
+            note: note
+        }));
+        
         emit ProductUpdated(id, p.stage, msg.sender);
     }
 
     // ------- View helpers -------
 
     /// @notice Get product basic info
-    function getProduct(bytes32 id) external view productExists(id) returns (string memory name, address holder, Stage stage, uint256 updatesCount) {
+    function getProduct(bytes32 id) external view productExists(id) returns (
+        string memory name,
+        address holder,
+        Stage stage,
+        uint256 updatesCount
+    ) {
         Product storage p = products[id];
         return (p.name, p.currentHolder, p.stage, p.history.length);
     }
 
+    /// @notice Get product status info
+    function getProductStatus(bytes32 id) external view productExists(id) returns (
+        BatchStatus status,
+        address currentParticipant,
+        string memory currentLocation,
+        Stage stage
+    ) {
+        Product storage p = products[id];
+        return (p.status, p.currentParticipant, p.currentLocation, p.stage);
+    }
+
     /// @notice Get a particular update from history by index
-    function getUpdate(bytes32 id, uint256 index) external view productExists(id) returns (address updater, Role role, uint256 timestamp, string memory note) {
+    function getUpdate(bytes32 id, uint256 index) external view productExists(id) returns (
+        address updater,
+        Role role,
+        uint256 timestamp,
+        string memory note
+    ) {
         Product storage p = products[id];
         require(index < p.history.length, "Index out of bounds");
         Update storage u = p.history[index];

@@ -3,6 +3,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { useWeb3 } from '../contexts/Web3Context';
 import { ethers } from 'ethers';
 import { QRCodeSVG } from 'qrcode.react';
+import { syncProduct } from '../services/api';
 
 interface DrugFormData {
 	drugName: string;
@@ -80,6 +81,48 @@ const ManufacturerForm: React.FC = () => {
 			// Wait for transaction confirmation
 			await tx.wait();
 			
+			// Get product info from blockchain to sync to database
+			try {
+				const [name, holder, stage, updatesCount] = await contract.getProduct(productId);
+				const historyLength = await contract.getHistoryLength(productId);
+				const historyArray = [];
+				
+				for (let i = 0; i < Number(historyLength); i++) {
+					const [updater, role, timestamp, note] = await contract.getUpdate(productId, i);
+					historyArray.push({
+						updater,
+						role: Number(role),
+						timestamp: Number(timestamp),
+						note
+					});
+				}
+				
+				// Sync to backend database
+				await syncProduct({
+					batchNumber: formData.batchNumber,
+					productId: productId,
+					name: formData.drugName,
+					currentHolder: holder,
+					stage: Number(stage),
+					history: historyArray,
+					exists: true,
+					drugName: formData.drugName,
+					manufacturingDate: formData.manufacturingDate,
+					expiryDate: formData.expiryDate,
+					quantity: formData.quantity,
+					unit: formData.unit,
+					ingredients: formData.ingredients,
+					manufacturerName: formData.manufacturerName,
+					licenseNumber: formData.licenseNumber,
+					qualityGrade: formData.qualityGrade,
+					txHash: tx.hash
+				});
+				console.log('Product synced to database');
+			} catch (syncErr) {
+				console.error('Failed to sync to database (non-critical):', syncErr);
+				// Don't fail the transaction if sync fails
+			}
+			
 			// Add to recent tasks
 			const newTask = {
 				type: 'drug_manufacturing' as const,
@@ -136,7 +179,7 @@ const ManufacturerForm: React.FC = () => {
 	};
 
 	if (submitted) {
-		const verifyUrl = `${window.location.origin}/verify/${submittedBatchNumber}`;
+		const verifyUrl = `${window.location.origin}/verify/${encodeURIComponent(submittedBatchNumber)}`;
 		
 		return (
 			<div className="bg-[#111] border border-[rgba(34,197,94,0.2)] rounded-xl p-8 text-center animation-fadeInUp">
