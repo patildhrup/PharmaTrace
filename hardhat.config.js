@@ -1,20 +1,25 @@
 require("@nomicfoundation/hardhat-toolbox");
 
-
-// const SEPOLIA_NETWORK_KEY = process.env.SEPOLIA_NETWORK_KEY;
-// const PRIVATE_KEY = process.env.PRIVATE_KEY;
-
 require('dotenv').config();
+
 /** @type import('hardhat/config').HardhatUserConfig */
 module.exports = {
   solidity: "0.8.28",
-  // networks: {
-  //   sepolia: {
-  //     url: SEPOLIA_NETWORK_KEY,
-  //     accounts: [PRIVATE_KEY],
-    
-  //   },
-  // },
+  networks: {
+    localhost: {
+      url: "http://127.0.0.1:8545",
+      chainId: 31337,
+      timeout: 120000,
+      gas: "auto",
+      gasPrice: "auto"
+    },
+    // sepolia: {
+    //   url: process.env.SEPOLIA_NETWORK_KEY,
+    //   accounts: [process.env.PRIVATE_KEY],
+    // },
+  },
+  // Configure Hardhat node to handle requests better
+  defaultNetwork: "localhost",
 };
 
 

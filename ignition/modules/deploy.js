@@ -1,4 +1,6 @@
 
+const { buildModule } = require("@nomicfoundation/hardhat-ignition/modules");
+
 module.exports = async ({ getNamedAccounts, deployments, ethers }) => {
   const { deploy } = deployments;
   const { deployer } = await getNamedAccounts();
