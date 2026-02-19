@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useWeb3 } from '../contexts/Web3Context';
 import { ethers } from 'ethers';
 
@@ -25,49 +25,46 @@ const BatchStatusTracker: React.FC<BatchStatusTrackerProps> = ({ batchNumber, pr
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
+        let isMounted = true;
+
+        const fetchStatusInfo = async () => {
+            if (!contract || !batchNumber) return;
+
+            setLoading(true);
+            setError(null);
+
+            try {
+                const id = productId || ethers.id(batchNumber);
+                const [status, currentParticipant, currentLocation, stage] = await contract.getProductStatus(id);
+
+                if (isMounted) {
+                    setStatusInfo({
+                        status: Number(status),
+                        currentParticipant,
+                        currentLocation,
+                        stage: Number(stage)
+                    });
+                }
+            } catch (err: any) {
+                console.error('Error fetching status:', err);
+                if (isMounted) {
+                    setError('Unable to fetch batch status');
+                }
+            } finally {
+                if (isMounted) {
+                    setLoading(false);
+                }
+            }
+        };
+
         if (isConnected && contract && batchNumber) {
             fetchStatusInfo();
-
-            // Set up event listeners for real-time updates
-            const statusChangedFilter = contract.filters.StatusChanged();
-            const handleStatusChange = (id: string, newStatus: number, participant: string, location: string) => {
-                const computedId = productId || ethers.id(batchNumber);
-                if (id === computedId) {
-                    fetchStatusInfo();
-                }
-            };
-
-            contract.on(statusChangedFilter, handleStatusChange);
-
-            return () => {
-                contract.off(statusChangedFilter, handleStatusChange);
-            };
         }
+
+        return () => {
+            isMounted = false;
+        };
     }, [batchNumber, productId, contract, isConnected]);
-
-    const fetchStatusInfo = async () => {
-        if (!contract || !batchNumber) return;
-
-        setLoading(true);
-        setError(null);
-
-        try {
-            const id = productId || ethers.id(batchNumber);
-            const [status, currentParticipant, currentLocation, stage] = await contract.getProductStatus(id);
-
-            setStatusInfo({
-                status: Number(status),
-                currentParticipant,
-                currentLocation,
-                stage: Number(stage)
-            });
-        } catch (err: any) {
-            console.error('Error fetching status:', err);
-            setError('Unable to fetch batch status');
-        } finally {
-            setLoading(false);
-        }
-    };
 
     const getStatusColor = (status: number) => {
         switch (status) {
@@ -170,8 +167,8 @@ const BatchStatusTracker: React.FC<BatchStatusTrackerProps> = ({ batchNumber, pr
                     <div className="flex items-center">
                         <span className="text-2xl mr-2">{getStatusIcon(statusInfo.status)}</span>
                         <span className={`text-lg font-bold ${statusInfo.status === 0 ? 'text-yellow-500' :
-                                statusInfo.status === 1 ? 'text-blue-500' :
-                                    'text-green-500'
+                            statusInfo.status === 1 ? 'text-blue-500' :
+                                'text-green-500'
                             }`}>
                             {STATUS_NAMES[statusInfo.status]}
                         </span>
@@ -219,10 +216,10 @@ const BatchStatusTracker: React.FC<BatchStatusTrackerProps> = ({ batchNumber, pr
                         return (
                             <div key={role} className="flex flex-col items-center flex-1">
                                 <div className={`w-10 h-10 rounded-full flex items-center justify-center border-2 transition-all ${isCurrent
-                                        ? 'bg-brand-green border-brand-green scale-110'
-                                        : isActive
-                                            ? 'bg-brand-green/50 border-brand-green/50'
-                                            : 'bg-gray-700 border-gray-600'
+                                    ? 'bg-brand-green border-brand-green scale-110'
+                                    : isActive
+                                        ? 'bg-brand-green/50 border-brand-green/50'
+                                        : 'bg-gray-700 border-gray-600'
                                     }`}>
                                     {isCurrent && <span className="animate-pulse">●</span>}
                                     {!isCurrent && isActive && '✓'}
