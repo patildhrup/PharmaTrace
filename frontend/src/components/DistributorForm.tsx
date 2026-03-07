@@ -1,6 +1,18 @@
 import React, { useState } from 'react';
 import { useWeb3 } from '../contexts/Web3Context';
 import { ethers } from 'ethers';
+import { syncProduct } from '../services/api';
+import { z } from 'zod';
+
+const distributorSchema = z.object({
+	batchNumber: z.string().min(1, 'Batch Number is required'),
+	destinationCenter: z.string().min(1, 'Destination Center is required'),
+	dispatchDate: z.string().min(1, 'Dispatch Date is required'),
+	packages: z.string().refine((val) => !isNaN(Number(val)) && Number(val) > 0, {
+		message: 'Packages must be a positive number',
+	}),
+	carrier: z.string().min(1, 'Carrier is required'),
+});
 
 interface DistributionFormData {
 	batchNumber: string;
@@ -23,16 +35,35 @@ const DistributorForm: React.FC = () => {
 	const [isSubmitting, setIsSubmitting] = useState(false);
 	const [submitted, setSubmitted] = useState(false);
 	const [error, setError] = useState<string | null>(null);
+	const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 	const [txHash, setTxHash] = useState<string | null>(null);
 
 	const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-		setFormData({ ...formData, [e.target.name]: e.target.value });
+		const { name, value } = e.target;
+		setFormData({ ...formData, [name]: value });
+		if (fieldErrors[name]) {
+			setFieldErrors({ ...fieldErrors, [name]: '' });
+		}
 	};
 
 	const handleSubmit = async (e: React.FormEvent) => {
 		e.preventDefault();
 		setError(null);
+		setFieldErrors({});
 		setTxHash(null);
+
+		// Zod Validation
+		const result = distributorSchema.safeParse(formData);
+		if (!result.success) {
+			const errors: Record<string, string> = {};
+			result.error.issues.forEach((issue) => {
+				if (issue.path.length > 0) {
+					errors[issue.path[0].toString()] = issue.message;
+				}
+			});
+			setFieldErrors(errors);
+			return;
+		}
 
 		if (!isConnected || !contract) {
 			try {
@@ -45,7 +76,7 @@ const DistributorForm: React.FC = () => {
 		}
 
 		setIsSubmitting(true);
-		
+
 		try {
 			const productId = ethers.id(formData.batchNumber);
 			const note = JSON.stringify({
@@ -72,6 +103,35 @@ const DistributorForm: React.FC = () => {
 				{ ...newTask, id: Date.now().toString(), timestamp: new Date().toISOString() },
 				...existing
 			]));
+
+			// Sync to backend database
+			try {
+				const [name, holder, stage, updatesCount] = await contract.getProduct(productId);
+				const historyLength = await contract.getHistoryLength(productId);
+				const historyArray = [];
+				for (let i = 0; i < Number(historyLength); i++) {
+					const [updater, role, timestamp, note] = await contract.getUpdate(productId, i);
+					historyArray.push({ updater, role: Number(role), timestamp: Number(timestamp), note });
+				}
+
+				await syncProduct({
+					batchNumber: formData.batchNumber,
+					productId: productId,
+					name,
+					currentHolder: holder,
+					stage: Number(stage),
+					history: historyArray,
+					exists: true,
+					destinationCenter: formData.destinationCenter,
+					dispatchDate: formData.dispatchDate,
+					txHash: tx.hash,
+					packages: formData.packages,
+					carrier: formData.carrier
+				});
+				console.log('Product sync successful');
+			} catch (syncErr) {
+				console.error('Failed to sync to database:', syncErr);
+			}
 
 			setIsSubmitting(false);
 			setSubmitted(true);
@@ -130,25 +190,30 @@ const DistributorForm: React.FC = () => {
 					<div>
 						<label className="block text-sm mb-2">Batch Number *</label>
 						<input name="batchNumber" value={formData.batchNumber} onChange={handleChange} required className="w-full bg-[#0d0d0d] border border-[rgba(34,197,94,0.25)] rounded-md px-3 py-2 focus:border-brand-green" />
+						{fieldErrors.batchNumber && <p className="text-red-500 text-xs mt-1">{fieldErrors.batchNumber}</p>}
 					</div>
 					<div>
 						<label className="block text-sm mb-2">Destination Center *</label>
 						<input name="destinationCenter" value={formData.destinationCenter} onChange={handleChange} required className="w-full bg-[#0d0d0d] border border-[rgba(34,197,94,0.25)] rounded-md px-3 py-2 focus:border-brand-green" />
+						{fieldErrors.destinationCenter && <p className="text-red-500 text-xs mt-1">{fieldErrors.destinationCenter}</p>}
 					</div>
 				</div>
 				<div className="grid md:grid-cols-2 gap-6">
 					<div>
 						<label className="block text-sm mb-2">Dispatch Date *</label>
 						<input type="date" name="dispatchDate" value={formData.dispatchDate} onChange={handleChange} required className="w-full bg-[#0d0d0d] border border-[rgba(34,197,94,0.25)] rounded-md px-3 py-2 focus:border-brand-green" />
+						{fieldErrors.dispatchDate && <p className="text-red-500 text-xs mt-1">{fieldErrors.dispatchDate}</p>}
 					</div>
 					<div>
 						<label className="block text-sm mb-2">Packages *</label>
 						<input type="number" name="packages" value={formData.packages} onChange={handleChange} required className="w-full bg-[#0d0d0d] border border-[rgba(34,197,94,0.25)] rounded-md px-3 py-2 focus:border-brand-green" />
+						{fieldErrors.packages && <p className="text-red-500 text-xs mt-1">{fieldErrors.packages}</p>}
 					</div>
 				</div>
 				<div>
 					<label className="block text-sm mb-2">Carrier *</label>
 					<input name="carrier" value={formData.carrier} onChange={handleChange} required className="w-full bg-[#0d0d0d] border border-[rgba(34,197,94,0.25)] rounded-md px-3 py-2 focus:border-brand-green" />
+					{fieldErrors.carrier && <p className="text-red-500 text-xs mt-1">{fieldErrors.carrier}</p>}
 				</div>
 				<button type="submit" disabled={isSubmitting} className="w-full bg-brand-green text-black rounded-md py-3 font-semibold hover:brightness-110 disabled:opacity-50">{isSubmitting ? 'Saving...' : 'Save Distribution'}</button>
 			</form>

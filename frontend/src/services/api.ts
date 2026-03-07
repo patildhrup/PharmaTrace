@@ -15,6 +15,35 @@ export interface Product {
     note: string;
   }>;
   exists: boolean;
+  lastSynced?: string;
+  txHash?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  // Logistics details
+  vehicleId?: string;
+  pickedUpFrom?: string;
+  deliveredTo?: string;
+  buyerName?: string;
+  saleDate?: string;
+  destinationCenter?: string;
+  pickupLocation?: string;
+  dropLocation?: string;
+  // Supplier details
+  supplierName?: string;
+  supplyDate?: string;
+  source?: string;
+  qualityCertificate?: string;
+  storageConditions?: string;
+  contactPerson?: string;
+  phoneNumber?: string;
+  // Distributor details
+  dispatchDate?: string;
+  packages?: string;
+  carrier?: string;
+  // Retailer details
+  invoiceNumber?: string;
+  quantitySold?: string;
+  // Additional fields from various forms
   drugName?: string;
   manufacturingDate?: string;
   expiryDate?: string;
@@ -24,10 +53,6 @@ export interface Product {
   manufacturerName?: string;
   licenseNumber?: string;
   qualityGrade?: string;
-  lastSynced?: string;
-  txHash?: string;
-  createdAt?: string;
-  updatedAt?: string;
 }
 
 // Get product by batch number

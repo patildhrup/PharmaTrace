@@ -2,6 +2,31 @@ import React, { useState } from 'react';
 import { useWeb3 } from '../contexts/Web3Context';
 import { ethers } from 'ethers';
 import { syncProduct } from '../services/api';
+import { z } from 'zod';
+
+const supplierSchema = z.object({
+	materialName: z.string().min(1, 'Material Name is required'),
+	supplierName: z.string().min(1, 'Supplier Name is required'),
+	batchNumber: z.string().min(1, 'Batch Number is required'),
+	supplyDate: z.string().min(1, 'Supply Date is required'),
+	quantity: z.string().refine((val) => !isNaN(Number(val)) && Number(val) > 0, {
+		message: 'Quantity must be a positive number',
+	}),
+	unit: z.string().min(1, 'Unit is required'),
+	source: z.string().min(1, 'Source Location is required'),
+	qualityCertificate: z.string().min(1, 'Quality Certificate is required'),
+	storageConditions: z.string().min(1, 'Storage Conditions are required'),
+	expiryDate: z.string().min(1, 'Expiry Date is required'),
+	contactPerson: z.string().min(1, 'Contact Person is required'),
+	phoneNumber: z.string().min(1, 'Phone Number is required'),
+}).refine((data) => {
+	const supplyDate = new Date(data.supplyDate);
+	const expiryDate = new Date(data.expiryDate);
+	return expiryDate > supplyDate;
+}, {
+	message: 'Expiry Date must be after Supply Date',
+	path: ['expiryDate'],
+});
 
 interface RawMaterialFormData {
 	materialName: string;
@@ -38,12 +63,27 @@ const SupplierForm: React.FC = () => {
 	const [isSubmitting, setIsSubmitting] = useState(false);
 	const [submitted, setSubmitted] = useState(false);
 	const [error, setError] = useState<string | null>(null);
+	const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 	const [txHash, setTxHash] = useState<string | null>(null);
 
 	const handleSubmit = async (e: React.FormEvent) => {
 		e.preventDefault();
 		setError(null);
+		setFieldErrors({});
 		setTxHash(null);
+
+		// Zod Validation
+		const result = supplierSchema.safeParse(formData);
+		if (!result.success) {
+			const errors: Record<string, string> = {};
+			result.error.issues.forEach((issue) => {
+				if (issue.path.length > 0) {
+					errors[issue.path[0].toString()] = issue.message;
+				}
+			});
+			setFieldErrors(errors);
+			return;
+		}
 
 		if (!isConnected || !contract) {
 			try {
@@ -56,11 +96,11 @@ const SupplierForm: React.FC = () => {
 		}
 
 		setIsSubmitting(true);
-		
+
 		try {
 			// Convert batch number to bytes32 for product ID
 			const productId = ethers.id(formData.batchNumber);
-			
+
 			// Create note with all form data
 			const note = JSON.stringify({
 				supplierName: formData.supplierName,
@@ -83,16 +123,16 @@ const SupplierForm: React.FC = () => {
 			);
 
 			setTxHash(tx.hash);
-			
+
 			// Wait for transaction confirmation
 			await tx.wait();
-			
+
 			// Get product info from blockchain to sync to database
 			try {
 				const [name, holder, stage, updatesCount] = await contract.getProduct(productId);
 				const historyLength = await contract.getHistoryLength(productId);
 				const historyArray = [];
-				
+
 				for (let i = 0; i < Number(historyLength); i++) {
 					const [updater, role, timestamp, note] = await contract.getUpdate(productId, i);
 					historyArray.push({
@@ -102,7 +142,7 @@ const SupplierForm: React.FC = () => {
 						note
 					});
 				}
-				
+
 				// Sync to backend database
 				// Note: Backend accepts additional fields beyond Product interface
 				await syncProduct({
@@ -131,7 +171,7 @@ const SupplierForm: React.FC = () => {
 				console.error('Failed to sync to database (non-critical):', syncErr);
 				// Don't fail the transaction if sync fails
 			}
-			
+
 			// Add to recent tasks
 			const newTask = {
 				type: 'raw_material' as const,
@@ -141,7 +181,7 @@ const SupplierForm: React.FC = () => {
 				user: 'Supplier',
 				details: `Batch: ${formData.batchNumber} | Certificate: ${formData.qualityCertificate} | TX: ${tx.hash.substring(0, 10)}...`
 			};
-			
+
 			// Save to localStorage
 			const existingTasks = JSON.parse(localStorage.getItem('pharmaTasks') || '[]');
 			const taskWithId = {
@@ -150,10 +190,10 @@ const SupplierForm: React.FC = () => {
 				timestamp: new Date().toISOString()
 			};
 			localStorage.setItem('pharmaTasks', JSON.stringify([taskWithId, ...existingTasks]));
-			
+
 			setIsSubmitting(false);
 			setSubmitted(true);
-			
+
 			// Reset form after 3 seconds
 			setTimeout(() => {
 				setSubmitted(false);
@@ -181,10 +221,19 @@ const SupplierForm: React.FC = () => {
 	};
 
 	const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
+		const { name, value } = e.target;
 		setFormData({
 			...formData,
-			[e.target.name]: e.target.value
+			[name]: value
 		});
+
+		// Clear field error when user starts typing
+		if (fieldErrors[name]) {
+			setFieldErrors({
+				...fieldErrors,
+				[name]: ''
+			});
+		}
 	};
 
 	if (submitted) {
@@ -256,6 +305,7 @@ const SupplierForm: React.FC = () => {
 							className="w-full bg-gradient-to-r from-[#0d0d0d] to-[#111] border-2 border-[rgba(34,197,94,0.25)] rounded-xl px-4 py-3 outline-none focus:border-brand-green focus:shadow-lg focus:shadow-brand-green/20 transition-all duration-300 hover:border-brand-green/50 text-white placeholder-white/50 hover-lift"
 							placeholder="e.g., Paracetamol API"
 						/>
+						{fieldErrors.materialName && <p className="text-red-500 text-xs mt-1">{fieldErrors.materialName}</p>}
 					</div>
 					<div className="group">
 						<label className="block text-sm font-semibold mb-3 text-white group-hover:text-brand-green transition-colors duration-300">
@@ -270,6 +320,7 @@ const SupplierForm: React.FC = () => {
 							className="w-full bg-gradient-to-r from-[#0d0d0d] to-[#111] border-2 border-[rgba(34,197,94,0.25)] rounded-xl px-4 py-3 outline-none focus:border-brand-green focus:shadow-lg focus:shadow-brand-green/20 transition-all duration-300 hover:border-brand-green/50 text-white placeholder-white/50 hover-lift"
 							placeholder="e.g., ChemSupply Ltd"
 						/>
+						{fieldErrors.supplierName && <p className="text-red-500 text-xs mt-1">{fieldErrors.supplierName}</p>}
 					</div>
 				</div>
 
@@ -285,6 +336,7 @@ const SupplierForm: React.FC = () => {
 							className="w-full bg-[#0d0d0d] border border-[rgba(34,197,94,0.25)] rounded-md px-3 py-2 outline-none focus:border-brand-green transition-colors"
 							placeholder="e.g., RM-2024-001"
 						/>
+						{fieldErrors.batchNumber && <p className="text-red-500 text-xs mt-1">{fieldErrors.batchNumber}</p>}
 					</div>
 					<div>
 						<label className="block text-sm font-medium mb-2">Supply Date *</label>
@@ -296,6 +348,7 @@ const SupplierForm: React.FC = () => {
 							required
 							className="w-full bg-[#0d0d0d] border border-[rgba(34,197,94,0.25)] rounded-md px-3 py-2 outline-none focus:border-brand-green transition-colors"
 						/>
+						{fieldErrors.supplyDate && <p className="text-red-500 text-xs mt-1">{fieldErrors.supplyDate}</p>}
 					</div>
 				</div>
 
@@ -311,6 +364,7 @@ const SupplierForm: React.FC = () => {
 							className="w-full bg-[#0d0d0d] border border-[rgba(34,197,94,0.25)] rounded-md px-3 py-2 outline-none focus:border-brand-green transition-colors"
 							placeholder="e.g., 100"
 						/>
+						{fieldErrors.quantity && <p className="text-red-500 text-xs mt-1">{fieldErrors.quantity}</p>}
 					</div>
 					<div>
 						<label className="block text-sm font-medium mb-2">Unit *</label>
@@ -328,6 +382,7 @@ const SupplierForm: React.FC = () => {
 							<option value="ml">Milliliters</option>
 							<option value="tons">Tons</option>
 						</select>
+						{fieldErrors.unit && <p className="text-red-500 text-xs mt-1">{fieldErrors.unit}</p>}
 					</div>
 				</div>
 
@@ -342,6 +397,7 @@ const SupplierForm: React.FC = () => {
 						className="w-full bg-[#0d0d0d] border border-[rgba(34,197,94,0.25)] rounded-md px-3 py-2 outline-none focus:border-brand-green transition-colors"
 						placeholder="e.g., Mumbai, Maharashtra, India"
 					/>
+					{fieldErrors.source && <p className="text-red-500 text-xs mt-1">{fieldErrors.source}</p>}
 				</div>
 
 				<div className="grid md:grid-cols-2 gap-6">
@@ -356,6 +412,7 @@ const SupplierForm: React.FC = () => {
 							className="w-full bg-[#0d0d0d] border border-[rgba(34,197,94,0.25)] rounded-md px-3 py-2 outline-none focus:border-brand-green transition-colors"
 							placeholder="e.g., QC-CERT-2024-001"
 						/>
+						{fieldErrors.qualityCertificate && <p className="text-red-500 text-xs mt-1">{fieldErrors.qualityCertificate}</p>}
 					</div>
 					<div>
 						<label className="block text-sm font-medium mb-2">Expiry Date *</label>
@@ -367,6 +424,7 @@ const SupplierForm: React.FC = () => {
 							required
 							className="w-full bg-[#0d0d0d] border border-[rgba(34,197,94,0.25)] rounded-md px-3 py-2 outline-none focus:border-brand-green transition-colors"
 						/>
+						{fieldErrors.expiryDate && <p className="text-red-500 text-xs mt-1">{fieldErrors.expiryDate}</p>}
 					</div>
 				</div>
 
@@ -381,6 +439,7 @@ const SupplierForm: React.FC = () => {
 						className="w-full bg-[#0d0d0d] border border-[rgba(34,197,94,0.25)] rounded-md px-3 py-2 outline-none focus:border-brand-green transition-colors"
 						placeholder="e.g., Store in cool, dry place below 25°C"
 					/>
+					{fieldErrors.storageConditions && <p className="text-red-500 text-xs mt-1">{fieldErrors.storageConditions}</p>}
 				</div>
 
 				<div className="grid md:grid-cols-2 gap-6">
@@ -395,6 +454,7 @@ const SupplierForm: React.FC = () => {
 							className="w-full bg-[#0d0d0d] border border-[rgba(34,197,94,0.25)] rounded-md px-3 py-2 outline-none focus:border-brand-green transition-colors"
 							placeholder="e.g., John Smith"
 						/>
+						{fieldErrors.contactPerson && <p className="text-red-500 text-xs mt-1">{fieldErrors.contactPerson}</p>}
 					</div>
 					<div>
 						<label className="block text-sm font-medium mb-2">Phone Number *</label>
@@ -407,6 +467,7 @@ const SupplierForm: React.FC = () => {
 							className="w-full bg-[#0d0d0d] border border-[rgba(34,197,94,0.25)] rounded-md px-3 py-2 outline-none focus:border-brand-green transition-colors"
 							placeholder="e.g., +91 98765 43210"
 						/>
+						{fieldErrors.phoneNumber && <p className="text-red-500 text-xs mt-1">{fieldErrors.phoneNumber}</p>}
 					</div>
 				</div>
 

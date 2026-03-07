@@ -1,6 +1,18 @@
 import React, { useState } from 'react';
 import { useWeb3 } from '../contexts/Web3Context';
 import { ethers } from 'ethers';
+import { syncProduct } from '../services/api';
+import { z } from 'zod';
+
+const retailerSchema = z.object({
+	invoiceNumber: z.string().min(1, 'Invoice Number is required'),
+	batchNumber: z.string().min(1, 'Batch Number is required'),
+	quantitySold: z.string().refine((val) => !isNaN(Number(val)) && Number(val) > 0, {
+		message: 'Quantity must be a positive number',
+	}),
+	buyerName: z.string().min(1, 'Buyer Name is required'),
+	saleDate: z.string().min(1, 'Sale Date is required'),
+});
 
 interface RetailerFormData {
 	invoiceNumber: string;
@@ -23,16 +35,35 @@ const RetailerForm: React.FC = () => {
 	const [submitted, setSubmitted] = useState(false);
 	const { contract, isConnected, connectWallet, account } = useWeb3();
 	const [error, setError] = useState<string | null>(null);
+	const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 	const [txHash, setTxHash] = useState<string | null>(null);
 
 	const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-		setFormData({ ...formData, [e.target.name]: e.target.value });
+		const { name, value } = e.target;
+		setFormData({ ...formData, [name]: value });
+		if (fieldErrors[name]) {
+			setFieldErrors({ ...fieldErrors, [name]: '' });
+		}
 	};
 
 	const handleSubmit = async (e: React.FormEvent) => {
 		e.preventDefault();
 		setError(null);
+		setFieldErrors({});
 		setTxHash(null);
+
+		// Zod Validation
+		const result = retailerSchema.safeParse(formData);
+		if (!result.success) {
+			const errors: Record<string, string> = {};
+			result.error.issues.forEach((issue) => {
+				if (issue.path.length > 0) {
+					errors[issue.path[0].toString()] = issue.message;
+				}
+			});
+			setFieldErrors(errors);
+			return;
+		}
 
 		if (!isConnected || !contract) {
 			try {
@@ -45,7 +76,7 @@ const RetailerForm: React.FC = () => {
 		}
 
 		setIsSubmitting(true);
-		
+
 		try {
 			const productId = ethers.id(formData.batchNumber);
 			const note = JSON.stringify({
@@ -58,7 +89,7 @@ const RetailerForm: React.FC = () => {
 			// First receive by retailer, then mark as sold
 			const tx1 = await contract.receiveByRetailer(productId, note);
 			await tx1.wait();
-			
+
 			const tx2 = await contract.markSold(productId, `Sold to ${formData.buyerName}`);
 			setTxHash(tx2.hash);
 			await tx2.wait();
@@ -76,6 +107,35 @@ const RetailerForm: React.FC = () => {
 				{ ...newTask, id: Date.now().toString(), timestamp: new Date().toISOString() },
 				...existing
 			]));
+
+			// Sync to backend database
+			try {
+				const [name, holder, stage, updatesCount] = await contract.getProduct(productId);
+				const historyLength = await contract.getHistoryLength(productId);
+				const historyArray = [];
+				for (let i = 0; i < Number(historyLength); i++) {
+					const [updater, role, timestamp, note] = await contract.getUpdate(productId, i);
+					historyArray.push({ updater, role: Number(role), timestamp: Number(timestamp), note });
+				}
+
+				await syncProduct({
+					batchNumber: formData.batchNumber,
+					productId: productId,
+					name,
+					currentHolder: holder,
+					stage: Number(stage),
+					history: historyArray,
+					exists: true,
+					invoiceNumber: formData.invoiceNumber,
+					buyerName: formData.buyerName,
+					saleDate: formData.saleDate,
+					quantitySold: formData.quantitySold,
+					txHash: tx2.hash
+				});
+				console.log('Product sync successful');
+			} catch (syncErr) {
+				console.error('Failed to sync to database:', syncErr);
+			}
 
 			setIsSubmitting(false);
 			setSubmitted(true);
@@ -134,25 +194,30 @@ const RetailerForm: React.FC = () => {
 					<div>
 						<label className="block text-sm mb-2">Invoice Number *</label>
 						<input name="invoiceNumber" value={formData.invoiceNumber} onChange={handleChange} required className="w-full bg-[#0d0d0d] border border-[rgba(34,197,94,0.25)] rounded-md px-3 py-2 focus:border-brand-green" />
+						{fieldErrors.invoiceNumber && <p className="text-red-500 text-xs mt-1">{fieldErrors.invoiceNumber}</p>}
 					</div>
 					<div>
 						<label className="block text-sm mb-2">Batch Number *</label>
 						<input name="batchNumber" value={formData.batchNumber} onChange={handleChange} required className="w-full bg-[#0d0d0d] border border-[rgba(34,197,94,0.25)] rounded-md px-3 py-2 focus:border-brand-green" />
+						{fieldErrors.batchNumber && <p className="text-red-500 text-xs mt-1">{fieldErrors.batchNumber}</p>}
 					</div>
 				</div>
 				<div className="grid md:grid-cols-2 gap-6">
 					<div>
 						<label className="block text-sm mb-2">Quantity Sold *</label>
 						<input type="number" name="quantitySold" value={formData.quantitySold} onChange={handleChange} required className="w-full bg-[#0d0d0d] border border-[rgba(34,197,94,0.25)] rounded-md px-3 py-2 focus:border-brand-green" />
+						{fieldErrors.quantitySold && <p className="text-red-500 text-xs mt-1">{fieldErrors.quantitySold}</p>}
 					</div>
 					<div>
 						<label className="block text-sm mb-2">Buyer Name *</label>
 						<input name="buyerName" value={formData.buyerName} onChange={handleChange} required className="w-full bg-[#0d0d0d] border border-[rgba(34,197,94,0.25)] rounded-md px-3 py-2 focus:border-brand-green" />
+						{fieldErrors.buyerName && <p className="text-red-500 text-xs mt-1">{fieldErrors.buyerName}</p>}
 					</div>
 				</div>
 				<div>
 					<label className="block text-sm mb-2">Sale Date *</label>
 					<input type="date" name="saleDate" value={formData.saleDate} onChange={handleChange} required className="w-full bg-[#0d0d0d] border border-[rgba(34,197,94,0.25)] rounded-md px-3 py-2 focus:border-brand-green" />
+					{fieldErrors.saleDate && <p className="text-red-500 text-xs mt-1">{fieldErrors.saleDate}</p>}
 				</div>
 				<button type="submit" disabled={isSubmitting} className="w-full bg-brand-green text-black rounded-md py-3 font-semibold hover:brightness-110 disabled:opacity-50">{isSubmitting ? 'Saving...' : 'Save Retail Sale'}</button>
 			</form>

@@ -1,6 +1,18 @@
 import React, { useState } from 'react';
 import { useWeb3 } from '../contexts/Web3Context';
 import { ethers } from 'ethers';
+import { syncProduct } from '../services/api';
+import { z } from 'zod';
+
+const transportSchema = z.object({
+	vehicleId: z.string().min(1, 'Vehicle ID is required'),
+	batchNumber: z.string().min(1, 'Batch Number is required'),
+	pickupLocation: z.string().min(1, 'Pickup Location is required'),
+	dropLocation: z.string().min(1, 'Drop Location is required'),
+	departureTime: z.string().min(1, 'Departure Time is required'),
+	fromEntity: z.string().min(1, 'Origin Entity is required'),
+	toEntity: z.string().min(1, 'Destination Entity is required'),
+});
 
 interface TransportFormData {
 	vehicleId: string;
@@ -8,6 +20,8 @@ interface TransportFormData {
 	pickupLocation: string;
 	dropLocation: string;
 	departureTime: string;
+	fromEntity: string;
+	toEntity: string;
 }
 
 const TransportForm: React.FC = () => {
@@ -16,7 +30,9 @@ const TransportForm: React.FC = () => {
 		batchNumber: '',
 		pickupLocation: '',
 		dropLocation: '',
-		departureTime: ''
+		departureTime: '',
+		fromEntity: 'Supplier',
+		toEntity: 'Manufacturer'
 	});
 
 	const [isSubmitting, setIsSubmitting] = useState(false);
@@ -24,16 +40,35 @@ const TransportForm: React.FC = () => {
 	const [actionType, setActionType] = useState<'pickup' | 'deliver'>('pickup');
 	const { contract, isConnected, connectWallet, account } = useWeb3();
 	const [error, setError] = useState<string | null>(null);
+	const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 	const [txHash, setTxHash] = useState<string | null>(null);
 
-	const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-		setFormData({ ...formData, [e.target.name]: e.target.value });
+	const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+		const { name, value } = e.target;
+		setFormData({ ...formData, [name]: value });
+		if (fieldErrors[name]) {
+			setFieldErrors({ ...fieldErrors, [name]: '' });
+		}
 	};
 
 	const handlePickup = async (e: React.FormEvent) => {
 		e.preventDefault();
 		setError(null);
+		setFieldErrors({});
 		setTxHash(null);
+
+		// Zod Validation
+		const result = transportSchema.safeParse(formData);
+		if (!result.success) {
+			const errors: Record<string, string> = {};
+			result.error.issues.forEach((issue) => {
+				if (issue.path.length > 0) {
+					errors[issue.path[0].toString()] = issue.message;
+				}
+			});
+			setFieldErrors(errors);
+			return;
+		}
 
 		if (!isConnected || !contract) {
 			try {
@@ -54,6 +89,7 @@ const TransportForm: React.FC = () => {
 				pickupLocation: formData.pickupLocation,
 				dropLocation: formData.dropLocation,
 				departureTime: formData.departureTime,
+				pickedUpFrom: formData.fromEntity,
 				action: 'pickup'
 			});
 
@@ -81,11 +117,41 @@ const TransportForm: React.FC = () => {
 				...existing
 			]));
 
+			// Sync to backend database
+			try {
+				const [name, holder, stage, updatesCount] = await contract.getProduct(productId);
+				const historyLength = await contract.getHistoryLength(productId);
+				const historyArray = [];
+				for (let i = 0; i < Number(historyLength); i++) {
+					const [updater, role, timestamp, note] = await contract.getUpdate(productId, i);
+					historyArray.push({ updater, role: Number(role), timestamp: Number(timestamp), note });
+				}
+
+				await syncProduct({
+					batchNumber: formData.batchNumber,
+					productId: productId,
+					name,
+					currentHolder: holder,
+					stage: Number(stage),
+					history: historyArray,
+					exists: true,
+					vehicleId: formData.vehicleId,
+					pickupLocation: formData.pickupLocation,
+					dropLocation: formData.dropLocation,
+					departureTime: formData.departureTime,
+					pickedUpFrom: formData.fromEntity,
+					txHash: tx.hash
+				});
+				console.log('Product sync successful');
+			} catch (syncErr) {
+				console.error('Failed to sync to database:', syncErr);
+			}
+
 			setIsSubmitting(false);
 			setSubmitted(true);
 			setTimeout(() => {
 				setSubmitted(false);
-				setFormData({ vehicleId: '', batchNumber: '', pickupLocation: '', dropLocation: '', departureTime: '' });
+				setFormData({ vehicleId: '', batchNumber: '', pickupLocation: '', dropLocation: '', departureTime: '', fromEntity: 'Supplier', toEntity: 'Manufacturer' });
 				setTxHash(null);
 			}, 3000);
 		} catch (err: any) {
@@ -98,7 +164,21 @@ const TransportForm: React.FC = () => {
 	const handleDeliver = async (e: React.FormEvent) => {
 		e.preventDefault();
 		setError(null);
+		setFieldErrors({});
 		setTxHash(null);
+
+		// Zod Validation
+		const result = transportSchema.safeParse(formData);
+		if (!result.success) {
+			const errors: Record<string, string> = {};
+			result.error.issues.forEach((issue) => {
+				if (issue.path.length > 0) {
+					errors[issue.path[0].toString()] = issue.message;
+				}
+			});
+			setFieldErrors(errors);
+			return;
+		}
 
 		if (!isConnected || !contract) {
 			try {
@@ -118,6 +198,7 @@ const TransportForm: React.FC = () => {
 				vehicleId: formData.vehicleId,
 				deliveryLocation: formData.dropLocation,
 				arrivalTime: new Date().toISOString(),
+				deliveredTo: formData.toEntity,
 				action: 'deliver'
 			});
 
@@ -144,11 +225,39 @@ const TransportForm: React.FC = () => {
 				...existing
 			]));
 
+			// Sync to backend database
+			try {
+				const [name, holder, stage, updatesCount] = await contract.getProduct(productId);
+				const historyLength = await contract.getHistoryLength(productId);
+				const historyArray = [];
+				for (let i = 0; i < Number(historyLength); i++) {
+					const [updater, role, timestamp, note] = await contract.getUpdate(productId, i);
+					historyArray.push({ updater, role: Number(role), timestamp: Number(timestamp), note });
+				}
+
+				await syncProduct({
+					batchNumber: formData.batchNumber,
+					productId: productId,
+					name,
+					currentHolder: holder,
+					stage: Number(stage),
+					history: historyArray,
+					exists: true,
+					vehicleId: formData.vehicleId,
+					dropLocation: formData.dropLocation,
+					deliveredTo: formData.toEntity,
+					txHash: tx.hash
+				});
+				console.log('Product sync successful');
+			} catch (syncErr) {
+				console.error('Failed to sync to database:', syncErr);
+			}
+
 			setIsSubmitting(false);
 			setSubmitted(true);
 			setTimeout(() => {
 				setSubmitted(false);
-				setFormData({ vehicleId: '', batchNumber: '', pickupLocation: '', dropLocation: '', departureTime: '' });
+				setFormData({ vehicleId: '', batchNumber: '', pickupLocation: '', dropLocation: '', departureTime: '', fromEntity: 'Supplier', toEntity: 'Manufacturer' });
 				setTxHash(null);
 			}, 3000);
 		} catch (err: any) {
@@ -191,8 +300,8 @@ const TransportForm: React.FC = () => {
 					type="button"
 					onClick={() => setActionType('pickup')}
 					className={`flex-1 px-6 py-3 rounded-xl font-semibold transition-all duration-300 ${actionType === 'pickup'
-							? 'bg-gradient-to-r from-brand-green to-brand-blue text-black shadow-lg'
-							: 'bg-gradient-to-r from-[#111] to-[#0d0d0d] text-white border-2 border-[rgba(34,197,94,0.2)] hover:border-brand-green'
+						? 'bg-gradient-to-r from-brand-green to-brand-blue text-black shadow-lg'
+						: 'bg-gradient-to-r from-[#111] to-[#0d0d0d] text-white border-2 border-[rgba(34,197,94,0.2)] hover:border-brand-green'
 						}`}
 				>
 					📦 Pickup Batch
@@ -201,8 +310,8 @@ const TransportForm: React.FC = () => {
 					type="button"
 					onClick={() => setActionType('deliver')}
 					className={`flex-1 px-6 py-3 rounded-xl font-semibold transition-all duration-300 ${actionType === 'deliver'
-							? 'bg-gradient-to-r from-brand-green to-brand-blue text-black shadow-lg'
-							: 'bg-gradient-to-r from-[#111] to-[#0d0d0d] text-white border-2 border-[rgba(34,197,94,0.2)] hover:border-brand-green'
+						? 'bg-gradient-to-r from-brand-green to-brand-blue text-black shadow-lg'
+						: 'bg-gradient-to-r from-[#111] to-[#0d0d0d] text-white border-2 border-[rgba(34,197,94,0.2)] hover:border-brand-green'
 						}`}
 				>
 					🎯 Deliver Batch
@@ -232,25 +341,42 @@ const TransportForm: React.FC = () => {
 						<div>
 							<label className="block text-sm mb-2">Vehicle ID *</label>
 							<input name="vehicleId" value={formData.vehicleId} onChange={handleChange} required className="w-full bg-[#0d0d0d] border border-[rgba(34,197,94,0.25)] rounded-md px-3 py-2 focus:border-brand-green text-white" placeholder="e.g., TR-001" />
+							{fieldErrors.vehicleId && <p className="text-red-500 text-xs mt-1">{fieldErrors.vehicleId}</p>}
 						</div>
 						<div>
 							<label className="block text-sm mb-2">Batch Number *</label>
 							<input name="batchNumber" value={formData.batchNumber} onChange={handleChange} required className="w-full bg-[#0d0d0d] border border-[rgba(34,197,94,0.25)] rounded-md px-3 py-2 focus:border-brand-green text-white" placeholder="e.g., PCM-2024-001" />
+							{fieldErrors.batchNumber && <p className="text-red-500 text-xs mt-1">{fieldErrors.batchNumber}</p>}
 						</div>
 					</div>
 					<div className="grid md:grid-cols-2 gap-6">
 						<div>
 							<label className="block text-sm mb-2">Pickup Location *</label>
 							<input name="pickupLocation" value={formData.pickupLocation} onChange={handleChange} required className="w-full bg-[#0d0d0d] border border-[rgba(34,197,94,0.25)] rounded-md px-3 py-2 focus:border-brand-green text-white" placeholder="e.g., Supplier Facility" />
+							{fieldErrors.pickupLocation && <p className="text-red-500 text-xs mt-1">{fieldErrors.pickupLocation}</p>}
 						</div>
+						<div>
+							<label className="block text-sm mb-2">Picked Up From (Role) *</label>
+							<select name="fromEntity" value={formData.fromEntity} onChange={handleChange} required className="w-full bg-[#0d0d0d] border border-[rgba(34,197,94,0.25)] rounded-md px-3 py-2 focus:border-brand-green text-white">
+								<option value="Supplier">Supplier</option>
+								<option value="Manufacturer">Manufacturer</option>
+								<option value="Distributor">Distributor</option>
+								<option value="Retailer">Retailer</option>
+							</select>
+							{fieldErrors.fromEntity && <p className="text-red-500 text-xs mt-1">{fieldErrors.fromEntity}</p>}
+						</div>
+					</div>
+					<div className="grid md:grid-cols-2 gap-6">
 						<div>
 							<label className="block text-sm mb-2">Drop Location *</label>
 							<input name="dropLocation" value={formData.dropLocation} onChange={handleChange} required className="w-full bg-[#0d0d0d] border border-[rgba(34,197,94,0.25)] rounded-md px-3 py-2 focus:border-brand-green text-white" placeholder="e.g., Manufacturing Facility" />
+							{fieldErrors.dropLocation && <p className="text-red-500 text-xs mt-1">{fieldErrors.dropLocation}</p>}
 						</div>
-					</div>
-					<div>
-						<label className="block text-sm mb-2">Departure Time *</label>
-						<input type="datetime-local" name="departureTime" value={formData.departureTime} onChange={handleChange} required className="w-full bg-[#0d0d0d] border border-[rgba(34,197,94,0.25)] rounded-md px-3 py-2 focus:border-brand-green text-white" />
+						<div>
+							<label className="block text-sm mb-2">Departure Time *</label>
+							<input type="datetime-local" name="departureTime" value={formData.departureTime} onChange={handleChange} required className="w-full bg-[#0d0d0d] border border-[rgba(34,197,94,0.25)] rounded-md px-3 py-2 focus:border-brand-green text-white" />
+							{fieldErrors.departureTime && <p className="text-red-500 text-xs mt-1">{fieldErrors.departureTime}</p>}
+						</div>
 					</div>
 					<button type="submit" disabled={isSubmitting} className="w-full bg-brand-green text-black rounded-md py-3 font-semibold hover:brightness-110 disabled:opacity-50 animation-pulseGlow">
 						{isSubmitting ? (
@@ -269,15 +395,30 @@ const TransportForm: React.FC = () => {
 						<div>
 							<label className="block text-sm mb-2">Vehicle ID *</label>
 							<input name="vehicleId" value={formData.vehicleId} onChange={handleChange} required className="w-full bg-[#0d0d0d] border border-[rgba(34,197,94,0.25)] rounded-md px-3 py-2 focus:border-brand-green text-white" placeholder="e.g., TR-001" />
+							{fieldErrors.vehicleId && <p className="text-red-500 text-xs mt-1">{fieldErrors.vehicleId}</p>}
 						</div>
 						<div>
 							<label className="block text-sm mb-2">Batch Number *</label>
 							<input name="batchNumber" value={formData.batchNumber} onChange={handleChange} required className="w-full bg-[#0d0d0d] border border-[rgba(34,197,94,0.25)] rounded-md px-3 py-2 focus:border-brand-green text-white" placeholder="e.g., PCM-2024-001" />
+							{fieldErrors.batchNumber && <p className="text-red-500 text-xs mt-1">{fieldErrors.batchNumber}</p>}
 						</div>
 					</div>
-					<div>
-						<label className="block text-sm mb-2">Delivery Location *</label>
-						<input name="dropLocation" value={formData.dropLocation} onChange={handleChange} required className="w-full bg-[#0d0d0d] border border-[rgba(34,197,94,0.25)] rounded-md px-3 py-2 focus:border-brand-green text-white" placeholder="e.g., Manufacturing Facility" />
+					<div className="grid md:grid-cols-2 gap-6">
+						<div>
+							<label className="block text-sm mb-2">Delivery Location *</label>
+							<input name="dropLocation" value={formData.dropLocation} onChange={handleChange} required className="w-full bg-[#0d0d0d] border border-[rgba(34,197,94,0.25)] rounded-md px-3 py-2 focus:border-brand-green text-white" placeholder="e.g., Manufacturing Facility" />
+							{fieldErrors.dropLocation && <p className="text-red-500 text-xs mt-1">{fieldErrors.dropLocation}</p>}
+						</div>
+						<div>
+							<label className="block text-sm mb-2">Delivering To (Role) *</label>
+							<select name="toEntity" value={formData.toEntity} onChange={handleChange} required className="w-full bg-[#0d0d0d] border border-[rgba(34,197,94,0.25)] rounded-md px-3 py-2 focus:border-brand-green text-white">
+								<option value="Supplier">Supplier</option>
+								<option value="Manufacturer">Manufacturer</option>
+								<option value="Distributor">Distributor</option>
+								<option value="Retailer">Retailer</option>
+							</select>
+							{fieldErrors.toEntity && <p className="text-red-500 text-xs mt-1">{fieldErrors.toEntity}</p>}
+						</div>
 					</div>
 					<button type="submit" disabled={isSubmitting} className="w-full bg-brand-green text-black rounded-md py-3 font-semibold hover:brightness-110 disabled:opacity-50 animation-pulseGlow">
 						{isSubmitting ? (

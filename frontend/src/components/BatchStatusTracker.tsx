@@ -34,6 +34,18 @@ const BatchStatusTracker: React.FC<BatchStatusTrackerProps> = ({ batchNumber, pr
             setError(null);
 
             try {
+                // Check if contract is deployed at the address
+                const provider = contract.runner?.provider;
+                if (provider) {
+                    const code = await provider.getCode(await contract.getAddress());
+                    if (code === '0x' || code === '0x0') {
+                        if (isMounted) {
+                            setError('Contract not found at address');
+                        }
+                        return;
+                    }
+                }
+
                 const id = productId || ethers.id(batchNumber);
                 const [status, currentParticipant, currentLocation, stage] = await contract.getProductStatus(id);
 
@@ -48,7 +60,13 @@ const BatchStatusTracker: React.FC<BatchStatusTrackerProps> = ({ batchNumber, pr
             } catch (err: any) {
                 console.error('Error fetching status:', err);
                 if (isMounted) {
-                    setError('Unable to fetch batch status');
+                    if (err.code === 'BAD_DATA') {
+                        setError('Invalid data from blockchain');
+                    } else if (err.message && err.message.includes('Product not found')) {
+                        setError('Product not found on blockchain');
+                    } else {
+                        setError('Unable to fetch batch status');
+                    }
                 }
             } finally {
                 if (isMounted) {
