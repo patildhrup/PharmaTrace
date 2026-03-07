@@ -87,35 +87,40 @@ const RetailerForm: React.FC = () => {
 			});
 
 			// First receive by retailer, then mark as sold
-			const tx1 = await contract.receiveByRetailer(productId, note);
-			await tx1.wait();
-
-			const tx2 = await contract.markSold(productId, `Sold to ${formData.buyerName}`);
-			setTxHash(tx2.hash);
-			await tx2.wait();
-
-			const newTask = {
-				type: 'retail' as const,
-				title: `Retail Sale: ${formData.batchNumber}`,
-				description: `${formData.quantitySold} units sold to ${formData.buyerName}`,
-				status: 'completed' as const,
-				user: 'Retailer',
-				details: `Invoice ${formData.invoiceNumber} on ${formData.saleDate} | TX: ${tx2.hash.substring(0, 10)}...`
-			};
-			const existing = JSON.parse(localStorage.getItem('pharmaTasks') || '[]');
-			localStorage.setItem('pharmaTasks', JSON.stringify([
-				{ ...newTask, id: Date.now().toString(), timestamp: new Date().toISOString() },
-				...existing
-			]));
-
-			// Sync to backend database
+			let tx2;
 			try {
-				const [name, holder, stage, updatesCount] = await contract.getProduct(productId);
-				const historyLength = await contract.getHistoryLength(productId);
-				const historyArray = [];
-				for (let i = 0; i < Number(historyLength); i++) {
-					const [updater, role, timestamp, note] = await contract.getUpdate(productId, i);
-					historyArray.push({ updater, role: Number(role), timestamp: Number(timestamp), note });
+				const tx1 = await contract.receiveByRetailer(productId, note);
+				await tx1.wait();
+
+				tx2 = await contract.markSold(productId, `Sold to ${formData.buyerName}`);
+				setTxHash(tx2.hash);
+				await tx2.wait();
+			} catch (blockchainErr: any) {
+				console.error('Blockchain transaction failed:', blockchainErr);
+				setError(`Blockchain Error: ${blockchainErr.message || 'Transaction failed'}. Attempting to sync data to database anyway...`);
+			}
+
+			// Sync to backend database regardless of blockchain confirmation if possible
+			try {
+				let name = 'Product';
+				let holder = account || '';
+				let stage = 6; // Retail stage
+				let historyArray: any[] = [];
+
+				// Try to get updated info from blockchain
+				try {
+					const [chainName, chainHolder, chainStage] = await contract.getProduct(productId);
+					const historyLength = await contract.getHistoryLength(productId);
+					name = chainName;
+					holder = chainHolder;
+					stage = Number(chainStage);
+
+					for (let i = 0; i < Number(historyLength); i++) {
+						const [updater, role, timestamp, note] = await contract.getUpdate(productId, i);
+						historyArray.push({ updater, role: Number(role), timestamp: Number(timestamp), note });
+					}
+				} catch (getInfoErr) {
+					console.warn('Could not fetch updated info from blockchain for sync:', getInfoErr);
 				}
 
 				await syncProduct({
@@ -123,18 +128,19 @@ const RetailerForm: React.FC = () => {
 					productId: productId,
 					name,
 					currentHolder: holder,
-					stage: Number(stage),
+					stage: stage,
 					history: historyArray,
 					exists: true,
 					invoiceNumber: formData.invoiceNumber,
 					buyerName: formData.buyerName,
 					saleDate: formData.saleDate,
 					quantitySold: formData.quantitySold,
-					txHash: tx2.hash
+					txHash: tx2?.hash || 'OFF-CHAIN-SYNC'
 				});
 				console.log('Product sync successful');
 			} catch (syncErr) {
 				console.error('Failed to sync to database:', syncErr);
+				if (!error) setError('Blockchain interaction had issues and database sync failed. Please check backend connection.');
 			}
 
 			setIsSubmitting(false);

@@ -94,37 +94,44 @@ const TransportForm: React.FC = () => {
 			});
 
 			// Call new transporterPickup function
-			const tx = await contract.transporterPickup(
-				productId,
-				formData.pickupLocation,
-				formData.dropLocation,
-				note
-			);
-			setTxHash(tx.hash);
-			await tx.wait();
-
-			const newTask = {
-				type: 'shipment' as const,
-				title: `Pickup: ${formData.batchNumber}`,
-				description: `Vehicle ${formData.vehicleId} picked up from ${formData.pickupLocation} to ${formData.dropLocation}`,
-				status: 'in_progress' as const,
-				user: 'Transport',
-				details: `Departure: ${formData.departureTime} | TX: ${tx.hash.substring(0, 10)}...`
-			};
-			const existing = JSON.parse(localStorage.getItem('pharmaTasks') || '[]');
-			localStorage.setItem('pharmaTasks', JSON.stringify([
-				{ ...newTask, id: Date.now().toString(), timestamp: new Date().toISOString() },
-				...existing
-			]));
-
-			// Sync to backend database
+			let tx;
 			try {
-				const [name, holder, stage, updatesCount] = await contract.getProduct(productId);
-				const historyLength = await contract.getHistoryLength(productId);
-				const historyArray = [];
-				for (let i = 0; i < Number(historyLength); i++) {
-					const [updater, role, timestamp, note] = await contract.getUpdate(productId, i);
-					historyArray.push({ updater, role: Number(role), timestamp: Number(timestamp), note });
+				tx = await contract.transporterPickup(
+					productId,
+					formData.pickupLocation,
+					formData.dropLocation,
+					note
+				);
+				setTxHash(tx.hash);
+				await tx.wait();
+			} catch (blockchainErr: any) {
+				console.error('Blockchain transaction failed:', blockchainErr);
+				setError(`Blockchain Error: ${blockchainErr.message || 'Transaction failed'}. Attempting to sync data to database anyway...`);
+			}
+
+			// Sync to backend database regardless of blockchain confirmation if possible
+			try {
+				let name = 'Product';
+				let holder = account || '';
+				let stage = 3; // Transport stage
+				let historyArray: any[] = [];
+
+				// Try to get updated info from blockchain if tx succeeded
+				if (tx) {
+					try {
+						const [chainName, chainHolder, chainStage] = await contract.getProduct(productId);
+						const historyLength = await contract.getHistoryLength(productId);
+						name = chainName;
+						holder = chainHolder;
+						stage = Number(chainStage);
+
+						for (let i = 0; i < Number(historyLength); i++) {
+							const [updater, role, timestamp, note] = await contract.getUpdate(productId, i);
+							historyArray.push({ updater, role: Number(role), timestamp: Number(timestamp), note });
+						}
+					} catch (getInfoErr) {
+						console.warn('Could not fetch updated info from blockchain for sync:', getInfoErr);
+					}
 				}
 
 				await syncProduct({
@@ -132,7 +139,7 @@ const TransportForm: React.FC = () => {
 					productId: productId,
 					name,
 					currentHolder: holder,
-					stage: Number(stage),
+					stage: stage,
 					history: historyArray,
 					exists: true,
 					vehicleId: formData.vehicleId,
@@ -140,11 +147,12 @@ const TransportForm: React.FC = () => {
 					dropLocation: formData.dropLocation,
 					departureTime: formData.departureTime,
 					pickedUpFrom: formData.fromEntity,
-					txHash: tx.hash
+					txHash: tx?.hash || 'OFF-CHAIN-SYNC'
 				});
 				console.log('Product sync successful');
 			} catch (syncErr) {
 				console.error('Failed to sync to database:', syncErr);
+				if (!error) setError('Blockchain interaction had issues and database sync failed. Please check backend connection.');
 			}
 
 			setIsSubmitting(false);
@@ -203,36 +211,43 @@ const TransportForm: React.FC = () => {
 			});
 
 			// Call new transporterDeliver function
-			const tx = await contract.transporterDeliver(
-				productId,
-				formData.dropLocation,
-				note
-			);
-			setTxHash(tx.hash);
-			await tx.wait();
-
-			const newTask = {
-				type: 'delivery' as const,
-				title: `Delivery: ${formData.batchNumber}`,
-				description: `Vehicle ${formData.vehicleId} delivered to ${formData.dropLocation}`,
-				status: 'completed' as const,
-				user: 'Transport',
-				details: `Delivered successfully | TX: ${tx.hash.substring(0, 10)}...`
-			};
-			const existing = JSON.parse(localStorage.getItem('pharmaTasks') || '[]');
-			localStorage.setItem('pharmaTasks', JSON.stringify([
-				{ ...newTask, id: Date.now().toString(), timestamp: new Date().toISOString() },
-				...existing
-			]));
-
-			// Sync to backend database
+			let tx;
 			try {
-				const [name, holder, stage, updatesCount] = await contract.getProduct(productId);
-				const historyLength = await contract.getHistoryLength(productId);
-				const historyArray = [];
-				for (let i = 0; i < Number(historyLength); i++) {
-					const [updater, role, timestamp, note] = await contract.getUpdate(productId, i);
-					historyArray.push({ updater, role: Number(role), timestamp: Number(timestamp), note });
+				tx = await contract.transporterDeliver(
+					productId,
+					formData.dropLocation,
+					note
+				);
+				setTxHash(tx.hash);
+				await tx.wait();
+			} catch (blockchainErr: any) {
+				console.error('Blockchain transaction failed:', blockchainErr);
+				setError(`Blockchain Error: ${blockchainErr.message || 'Transaction failed'}. Attempting to sync data to database anyway...`);
+			}
+
+			// Sync to backend database regardless of blockchain confirmation if possible
+			try {
+				let name = 'Product';
+				let holder = account || '';
+				let stage = 4; // Delivery stage
+				let historyArray: any[] = [];
+
+				// Try to get updated info from blockchain if tx succeeded
+				if (tx) {
+					try {
+						const [chainName, chainHolder, chainStage] = await contract.getProduct(productId);
+						const historyLength = await contract.getHistoryLength(productId);
+						name = chainName;
+						holder = chainHolder;
+						stage = Number(chainStage);
+
+						for (let i = 0; i < Number(historyLength); i++) {
+							const [updater, role, timestamp, note] = await contract.getUpdate(productId, i);
+							historyArray.push({ updater, role: Number(role), timestamp: Number(timestamp), note });
+						}
+					} catch (getInfoErr) {
+						console.warn('Could not fetch updated info from blockchain for sync:', getInfoErr);
+					}
 				}
 
 				await syncProduct({
@@ -240,17 +255,18 @@ const TransportForm: React.FC = () => {
 					productId: productId,
 					name,
 					currentHolder: holder,
-					stage: Number(stage),
+					stage: stage,
 					history: historyArray,
 					exists: true,
 					vehicleId: formData.vehicleId,
 					dropLocation: formData.dropLocation,
 					deliveredTo: formData.toEntity,
-					txHash: tx.hash
+					txHash: tx?.hash || 'OFF-CHAIN-SYNC'
 				});
 				console.log('Product sync successful');
 			} catch (syncErr) {
 				console.error('Failed to sync to database:', syncErr);
+				if (!error) setError('Blockchain interaction had issues and database sync failed. Please check backend connection.');
 			}
 
 			setIsSubmitting(false);

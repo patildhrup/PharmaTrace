@@ -113,35 +113,54 @@ const ManufacturerForm: React.FC = () => {
 			});
 
 			// Call blockchain contract - manufacture function
-			const tx = await contract.manufacture(productId, note);
-			setTxHash(tx.hash);
-
-			// Wait for transaction confirmation
-			await tx.wait();
-
-			// Get product info from blockchain to sync to database
+			let tx;
 			try {
-				const [name, holder, stage, updatesCount] = await contract.getProduct(productId);
-				const historyLength = await contract.getHistoryLength(productId);
-				const historyArray = [];
+				tx = await contract.manufacture(productId, note);
+				setTxHash(tx.hash);
+				// Wait for transaction confirmation
+				await tx.wait();
+			} catch (blockchainErr: any) {
+				console.error('Blockchain transaction failed:', blockchainErr);
+				setError(`Blockchain Error: ${blockchainErr.message || 'Transaction failed'}. Attempting to sync data to database anyway...`);
+			}
 
-				for (let i = 0; i < Number(historyLength); i++) {
-					const [updater, role, timestamp, note] = await contract.getUpdate(productId, i);
-					historyArray.push({
-						updater,
-						role: Number(role),
-						timestamp: Number(timestamp),
-						note
-					});
+			// Sync to backend database regardless of blockchain confirmation if possible
+			try {
+				let name = formData.drugName;
+				let holder = account || '';
+				let stage = 2; // Manufacturing stage
+				let historyArray: any[] = [];
+
+				// Try to get updated info from blockchain if tx succeeded
+				if (tx) {
+					try {
+						const [chainName, chainHolder, chainStage] = await contract.getProduct(productId);
+						const historyLength = await contract.getHistoryLength(productId);
+						name = chainName;
+						holder = chainHolder;
+						stage = Number(chainStage);
+
+						for (let i = 0; i < Number(historyLength); i++) {
+							const [updater, role, timestamp, note] = await contract.getUpdate(productId, i);
+							historyArray.push({
+								updater,
+								role: Number(role),
+								timestamp: Number(timestamp),
+								note
+							});
+						}
+					} catch (getInfoErr) {
+						console.warn('Could not fetch updated info from blockchain for sync:', getInfoErr);
+					}
 				}
 
 				// Sync to backend database
 				await syncProduct({
 					batchNumber: formData.batchNumber,
 					productId: productId,
-					name: formData.drugName,
+					name: name,
 					currentHolder: holder,
-					stage: Number(stage),
+					stage: stage,
 					history: historyArray,
 					exists: true,
 					drugName: formData.drugName,
@@ -153,12 +172,12 @@ const ManufacturerForm: React.FC = () => {
 					manufacturerName: formData.manufacturerName,
 					licenseNumber: formData.licenseNumber,
 					qualityGrade: formData.qualityGrade,
-					txHash: tx.hash
+					txHash: tx?.hash || 'OFF-CHAIN-SYNC'
 				});
 				console.log('Product synced to database');
 			} catch (syncErr) {
-				console.error('Failed to sync to database (non-critical):', syncErr);
-				// Don't fail the transaction if sync fails
+				console.error('Failed to sync to database:', syncErr);
+				if (!error) setError('Blockchain interaction had issues and database sync failed. Please check backend connection.');
 			}
 
 			// Add to recent tasks

@@ -116,48 +116,65 @@ const SupplierForm: React.FC = () => {
 			});
 
 			// Call blockchain contract
-			const tx = await contract.createProduct(
-				productId,
-				formData.materialName,
-				note
-			);
-
-			setTxHash(tx.hash);
-
-			// Wait for transaction confirmation
-			await tx.wait();
-
-			// Get product info from blockchain to sync to database
+			let tx;
 			try {
-				const [name, holder, stage, updatesCount] = await contract.getProduct(productId);
-				const historyLength = await contract.getHistoryLength(productId);
-				const historyArray = [];
+				tx = await contract.createProduct(
+					productId,
+					formData.materialName,
+					note
+				);
+				setTxHash(tx.hash);
+				// Wait for transaction confirmation
+				await tx.wait();
+			} catch (blockchainErr: any) {
+				console.error('Blockchain transaction failed:', blockchainErr);
+				setError(`Blockchain Error: ${blockchainErr.message || 'Transaction failed'}. Attempting to sync data to database anyway...`);
+				// Continue to sync if it's a "null response" or non-fatal RPC error
+			}
 
-				for (let i = 0; i < Number(historyLength); i++) {
-					const [updater, role, timestamp, note] = await contract.getUpdate(productId, i);
-					historyArray.push({
-						updater,
-						role: Number(role),
-						timestamp: Number(timestamp),
-						note
-					});
+			// Sync to backend database regardless of blockchain confirmation if possible
+			try {
+				let name = formData.materialName;
+				let holder = account || '';
+				let stage = 1;
+				let historyArray: any[] = [];
+
+				// Try to get updated info from blockchain if tx succeeded
+				if (tx) {
+					try {
+						const [chainName, chainHolder, chainStage] = await contract.getProduct(productId);
+						const historyLength = await contract.getHistoryLength(productId);
+						name = chainName;
+						holder = chainHolder;
+						stage = Number(chainStage);
+
+						for (let i = 0; i < Number(historyLength); i++) {
+							const [updater, role, timestamp, note] = await contract.getUpdate(productId, i);
+							historyArray.push({
+								updater,
+								role: Number(role),
+								timestamp: Number(timestamp),
+								note
+							});
+						}
+					} catch (getInfoErr) {
+						console.warn('Could not fetch updated info from blockchain for sync:', getInfoErr);
+					}
 				}
 
 				// Sync to backend database
-				// Note: Backend accepts additional fields beyond Product interface
 				await syncProduct({
 					batchNumber: formData.batchNumber,
 					productId: productId,
-					name: formData.materialName,
+					name: name,
 					currentHolder: holder,
-					stage: Number(stage),
+					stage: stage,
 					history: historyArray,
 					exists: true,
 					quantity: formData.quantity,
 					unit: formData.unit,
 					expiryDate: formData.expiryDate,
-					txHash: tx.hash,
-					// Additional supplier-specific fields (backend will accept these)
+					txHash: tx?.hash || 'OFF-CHAIN-SYNC',
 					supplierName: formData.supplierName,
 					supplyDate: formData.supplyDate,
 					source: formData.source,
@@ -168,8 +185,8 @@ const SupplierForm: React.FC = () => {
 				} as any);
 				console.log('Product synced to database');
 			} catch (syncErr) {
-				console.error('Failed to sync to database (non-critical):', syncErr);
-				// Don't fail the transaction if sync fails
+				console.error('Failed to sync to database:', syncErr);
+				if (!error) setError('Blockchain succeeded but database sync failed. Please check backend connection.');
 			}
 
 			// Add to recent tasks

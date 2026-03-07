@@ -86,32 +86,40 @@ const DistributorForm: React.FC = () => {
 				carrier: formData.carrier
 			});
 
-			const tx = await contract.receiveByDistributor(productId, note);
-			setTxHash(tx.hash);
-			await tx.wait();
-
-			const newTask = {
-				type: 'distribution' as const,
-				title: `Distribution Dispatched: ${formData.batchNumber}`,
-				description: `To ${formData.destinationCenter} via ${formData.carrier} (${formData.packages} packages)`,
-				status: 'completed' as const,
-				user: 'Distributor',
-				details: `Dispatch Date: ${formData.dispatchDate} | TX: ${tx.hash.substring(0, 10)}...`
-			};
-			const existing = JSON.parse(localStorage.getItem('pharmaTasks') || '[]');
-			localStorage.setItem('pharmaTasks', JSON.stringify([
-				{ ...newTask, id: Date.now().toString(), timestamp: new Date().toISOString() },
-				...existing
-			]));
-
-			// Sync to backend database
+			// Call blockchain contract
+			let tx;
 			try {
-				const [name, holder, stage, updatesCount] = await contract.getProduct(productId);
-				const historyLength = await contract.getHistoryLength(productId);
-				const historyArray = [];
-				for (let i = 0; i < Number(historyLength); i++) {
-					const [updater, role, timestamp, note] = await contract.getUpdate(productId, i);
-					historyArray.push({ updater, role: Number(role), timestamp: Number(timestamp), note });
+				tx = await contract.receiveByDistributor(productId, note);
+				setTxHash(tx.hash);
+				await tx.wait();
+			} catch (blockchainErr: any) {
+				console.error('Blockchain transaction failed:', blockchainErr);
+				setError(`Blockchain Error: ${blockchainErr.message || 'Transaction failed'}. Attempting to sync data to database anyway...`);
+			}
+
+			// Sync to backend database regardless of blockchain confirmation if possible
+			try {
+				let name = 'Product';
+				let holder = account || '';
+				let stage = 5; // Distributor stage
+				let historyArray: any[] = [];
+
+				// Try to get updated info from blockchain if tx succeeded
+				if (tx) {
+					try {
+						const [chainName, chainHolder, chainStage] = await contract.getProduct(productId);
+						const historyLength = await contract.getHistoryLength(productId);
+						name = chainName;
+						holder = chainHolder;
+						stage = Number(chainStage);
+
+						for (let i = 0; i < Number(historyLength); i++) {
+							const [updater, role, timestamp, note] = await contract.getUpdate(productId, i);
+							historyArray.push({ updater, role: Number(role), timestamp: Number(timestamp), note });
+						}
+					} catch (getInfoErr) {
+						console.warn('Could not fetch updated info from blockchain for sync:', getInfoErr);
+					}
 				}
 
 				await syncProduct({
@@ -119,18 +127,19 @@ const DistributorForm: React.FC = () => {
 					productId: productId,
 					name,
 					currentHolder: holder,
-					stage: Number(stage),
+					stage: stage,
 					history: historyArray,
 					exists: true,
 					destinationCenter: formData.destinationCenter,
 					dispatchDate: formData.dispatchDate,
-					txHash: tx.hash,
+					txHash: tx?.hash || 'OFF-CHAIN-SYNC',
 					packages: formData.packages,
 					carrier: formData.carrier
 				});
 				console.log('Product sync successful');
 			} catch (syncErr) {
 				console.error('Failed to sync to database:', syncErr);
+				if (!error) setError('Blockchain interaction had issues and database sync failed. Please check backend connection.');
 			}
 
 			setIsSubmitting(false);

@@ -65,7 +65,6 @@ const productSchema = new mongoose.Schema({
 });
 
 // Index for faster lookups
-productSchema.index({ batchNumber: 1 });
 productSchema.index({ productId: 1 });
 
 module.exports = mongoose.model('Product', productSchema);
