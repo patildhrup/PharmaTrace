@@ -99,13 +99,34 @@ const MedicineDetails: React.FC = () => {
                         ...dbProduct
                     });
 
-                    // Convert history
+                    // Extract details from history even for DB results
                     const historyArray: UpdateInfo[] = dbProduct.history.map((update: any) => ({
                         updater: update.updater,
                         role: update.role,
                         timestamp: BigInt(update.timestamp),
                         note: update.note
                     }));
+
+                    let medicineDetails: any = {};
+                    // Look through history for details (usually role 1 or 2 provides the initial details)
+                    // We iterate in order so later updates can override if necessary (though usually details are fixed at creation/manufacturing)
+                    [...historyArray].sort((a, b) => Number(a.timestamp) - Number(b.timestamp)).forEach(update => {
+                        try {
+                            const note = JSON.parse(update.note);
+                            // Merge details from the note if it's an object
+                            if (typeof note === 'object' && note !== null) {
+                                medicineDetails = { ...medicineDetails, ...note };
+                            }
+                        } catch (e) {
+                            // Note is not JSON, skip
+                        }
+                    });
+
+                    setProductInfo({
+                        ...dbProduct,
+                        holder: dbProduct.currentHolder,
+                        ...medicineDetails
+                    });
 
                     setHistory(historyArray.reverse());
                     setDataSource('database');

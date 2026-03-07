@@ -24,9 +24,24 @@ router.post('/', async (req, res) => {
 
         // 1. Upsert generic product data
         console.log(`Upserting Product: ${batchNumber}`);
+
+        // Define core fields that should stay in the Product collection
+        const coreProductData = {
+            batchNumber: productData.batchNumber,
+            productId: productData.productId,
+            name: productData.name,
+            currentHolder: productData.currentHolder,
+            stage: productData.stage,
+            updatesCount: productData.updatesCount,
+            history: productData.history,
+            exists: productData.exists,
+            txHash: productData.txHash,
+            lastSynced: new Date()
+        };
+
         const product = await Product.findOneAndUpdate(
             { batchNumber },
-            { ...productData, lastSynced: new Date() },
+            coreProductData,
             { new: true, upsert: true }
         );
         console.log('Generic product upserted successfully');
