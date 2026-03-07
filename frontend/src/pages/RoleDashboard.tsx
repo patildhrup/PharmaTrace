@@ -10,6 +10,7 @@ import TransportForm from '../components/TransportForm';
 import RetailerForm from '../components/RetailerForm';
 import ConsumerForm from '../components/ConsumerForm';
 import RecentTasks from '../components/RecentTasks';
+import NotificationPanel from '../components/NotificationPanel';
 
 interface RoleData {
 	id: string;
@@ -29,6 +30,17 @@ const RoleDashboard: React.FC = () => {
 	const [activeTab, setActiveTab] = useState<'dashboard' | 'form' | 'activities'>('dashboard');
 	const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
 	const [switchingAccount, setSwitchingAccount] = useState(false);
+	const [isNotifOpen, setIsNotifOpen] = useState(false);
+	const [prefillBatch, setPrefillBatch] = useState<string | null>(null);
+	const [prefillLocation, setPrefillLocation] = useState<string | null>(null);
+	const [prefillEntity, setPrefillEntity] = useState<string | null>(null);
+
+	const handleAcceptPickup = (batch: string, location: string, entity: string) => {
+		setPrefillBatch(batch);
+		setPrefillLocation(location);
+		setPrefillEntity(entity);
+		setActiveTab('form');
+	};
 
 	const expectedAddress = roleId ? ROLE_ACCOUNTS[roleId] : null;
 	const isWrongAccount = isConnected && account && expectedAddress
@@ -222,7 +234,7 @@ const RoleDashboard: React.FC = () => {
 				</div>
 			</div>
 			{/* Header */}
-			<div className="bg-[#111] border-b border-[rgba(34,197,94,0.2)] relative z-10">
+			<div className="bg-[#111] border-b border-[rgba(34,197,94,0.2)] relative z-40">
 				<div className="max-w-7xl mx-auto px-4 py-6">
 					<div className="flex justify-between items-center">
 						<div className="flex items-center">
@@ -243,12 +255,25 @@ const RoleDashboard: React.FC = () => {
 						{/* Wallet Badge */}
 						<div className="flex items-center gap-4">
 							{/* Notification Button */}
-							<button
-								className="p-2 rounded-full border border-white/10 bg-white/5 text-white/70 hover:text-brand-green hover:border-brand-green/30 transition-all duration-300 hover:shadow-[0_0_15px_rgba(34,197,94,0.2)]"
-								title="Notifications"
-							>
-								<Bell className="w-5 h-5" />
-							</button>
+							<div className="relative">
+								<button
+									onClick={() => setIsNotifOpen(!isNotifOpen)}
+									className={`p-2 rounded-full border border-white/10 transition-all duration-300 hover-lift ${isNotifOpen
+										? 'bg-brand-green text-black border-brand-green shadow-[0_0_15px_rgba(34,197,94,0.4)]'
+										: 'bg-white/5 text-white/70 hover:text-brand-green hover:border-brand-green/30 hover:shadow-[0_0_15px_rgba(34,197,94,0.2)]'
+										}`}
+									title="Notifications"
+								>
+									<Bell className="w-5 h-5" />
+								</button>
+
+								<NotificationPanel
+									role={roleId || ''}
+									isOpen={isNotifOpen}
+									onClose={() => setIsNotifOpen(false)}
+									onAcceptPickup={handleAcceptPickup}
+								/>
+							</div>
 
 							{isConnected && account ? (
 								<div className={`flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs font-mono ${isWrongAccount
@@ -270,35 +295,37 @@ const RoleDashboard: React.FC = () => {
 			</div>
 
 			{/* MetaMask Mismatch / Not Connected Warning Banner */}
-			{(isWrongAccount || isNotConnected) && (
-				<div className="relative z-10 border-b border-red-500/30 bg-red-900/10">
-					<div className="max-w-7xl mx-auto px-4 py-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-						<div className="flex items-start gap-3">
-							<span className="text-xl mt-0.5">🦊</span>
-							<div>
-								{isNotConnected ? (
-									<p className="text-yellow-400 font-semibold text-sm">Wallet not connected</p>
-								) : (
-									<p className="text-red-400 font-semibold text-sm">Wrong MetaMask account connected</p>
-								)}
-								{expectedAddress && (
-									<p className="text-white/50 text-xs mt-0.5">
-										Expected: <code className="text-brand-green font-mono">{truncateAddress(expectedAddress)}</code>
-										<span className="ml-2 text-white/30 font-mono text-[10px]">{expectedAddress}</span>
-									</p>
-								)}
+			{
+				(isWrongAccount || isNotConnected) && (
+					<div className="relative z-10 border-b border-red-500/30 bg-red-900/10">
+						<div className="max-w-7xl mx-auto px-4 py-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+							<div className="flex items-start gap-3">
+								<span className="text-xl mt-0.5">🦊</span>
+								<div>
+									{isNotConnected ? (
+										<p className="text-yellow-400 font-semibold text-sm">Wallet not connected</p>
+									) : (
+										<p className="text-red-400 font-semibold text-sm">Wrong MetaMask account connected</p>
+									)}
+									{expectedAddress && (
+										<p className="text-white/50 text-xs mt-0.5">
+											Expected: <code className="text-brand-green font-mono">{truncateAddress(expectedAddress)}</code>
+											<span className="ml-2 text-white/30 font-mono text-[10px]">{expectedAddress}</span>
+										</p>
+									)}
+								</div>
 							</div>
+							<button
+								onClick={handleSwitchAccount}
+								disabled={switchingAccount}
+								className="shrink-0 bg-brand-green text-black text-xs font-bold px-4 py-1.5 rounded-full hover:brightness-110 transition disabled:opacity-60"
+							>
+								{switchingAccount ? 'Switching...' : '🔄 Switch Account'}
+							</button>
 						</div>
-						<button
-							onClick={handleSwitchAccount}
-							disabled={switchingAccount}
-							className="shrink-0 bg-brand-green text-black text-xs font-bold px-4 py-1.5 rounded-full hover:brightness-110 transition disabled:opacity-60"
-						>
-							{switchingAccount ? 'Switching...' : '🔄 Switch Account'}
-						</button>
 					</div>
-				</div>
-			)}
+				)
+			}
 
 			{/* Main Content */}
 			<div className="max-w-7xl mx-auto px-4 py-8 relative z-10">
@@ -344,7 +371,13 @@ const RoleDashboard: React.FC = () => {
 						{roleData?.id === 'manufacturer' && <ManufacturerForm />}
 						{roleData?.id === 'supplier' && <SupplierForm />}
 						{roleData?.id === 'distributor' && <DistributorForm />}
-						{roleData?.id === 'transport' && <TransportForm />}
+						{roleData?.id === 'transport' && (
+							<TransportForm
+								prefilledBatch={prefillBatch}
+								prefilledLocation={prefillLocation}
+								prefilledEntity={prefillEntity}
+							/>
+						)}
 						{roleData?.id === 'retailer' && <RetailerForm />}
 						{roleData?.id === 'consumer' && <ConsumerForm />}
 					</div>

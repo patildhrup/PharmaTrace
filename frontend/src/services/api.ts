@@ -109,6 +109,61 @@ export const searchProducts = async (query: string): Promise<Product[]> => {
   return response.json();
 };
 
+// Notification Interfaces
+export interface Notification {
+  _id: string;
+  recipientRole: string;
+  senderRole: string;
+  senderAddress: string;
+  message: string;
+  type: 'pickup_request' | 'pickup_accepted' | 'info';
+  batchNumber: string;
+  sourceLocation?: string;
+  status: 'pending' | 'accepted' | 'rejected' | 'read';
+  timestamp: string;
+}
+
+// Get notifications for a role
+export const getNotifications = async (role: string): Promise<Notification[]> => {
+  const response = await fetch(`${API_BASE_URL}/notifications/${role}`);
+  if (!response.ok) {
+    return [];
+  }
+  return response.json();
+};
+
+// Create a notification
+export const createNotification = async (notificationData: Partial<Notification>): Promise<Notification> => {
+  const response = await fetch(`${API_BASE_URL}/notifications`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(notificationData),
+  });
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.message || 'Failed to create notification');
+  }
+  return response.json();
+};
+
+// Update notification status
+export const updateNotificationStatus = async (id: string, status: 'pending' | 'accepted' | 'rejected' | 'read'): Promise<Notification> => {
+  const response = await fetch(`${API_BASE_URL}/notifications/${id}`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ status }),
+  });
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.message || 'Failed to update notification');
+  }
+  return response.json();
+};
+
 // Health check
 export const checkApiHealth = async (): Promise<boolean> => {
   try {

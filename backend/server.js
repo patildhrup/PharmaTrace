@@ -3,6 +3,7 @@ const express = require('express');
 const cors = require('cors');
 const connectDB = require('./app/config/db');
 const productRoutes = require('./app/routes/productRoutes');
+const notificationRoutes = require('./app/routes/notificationRoutes');
 
 const app = express();
 
@@ -15,6 +16,7 @@ app.use(express.json());
 
 // Routes
 app.use('/api/products', productRoutes);
+app.use('/api/notifications', notificationRoutes);
 app.get('/api/health', (req, res) => res.json({ status: 'OK' }));
 
 const PORT = process.env.PORT || 5000;

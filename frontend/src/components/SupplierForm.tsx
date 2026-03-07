@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useWeb3 } from '../contexts/Web3Context';
 import { ethers } from 'ethers';
-import { syncProduct } from '../services/api';
+import { syncProduct, createNotification } from '../services/api';
 import { z } from 'zod';
 
 const supplierSchema = z.object({
@@ -66,13 +66,19 @@ const SupplierForm: React.FC = () => {
 	const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 	const [txHash, setTxHash] = useState<string | null>(null);
 
+	const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+		const { name, value } = e.target;
+		setFormData({ ...formData, [name]: value });
+		if (fieldErrors[name]) {
+			setFieldErrors({ ...fieldErrors, [name]: '' });
+		}
+	};
+
 	const handleSubmit = async (e: React.FormEvent) => {
 		e.preventDefault();
 		setError(null);
 		setFieldErrors({});
-		setTxHash(null);
 
-		// Zod Validation
 		const result = supplierSchema.safeParse(formData);
 		if (!result.success) {
 			const errors: Record<string, string> = {};
@@ -98,48 +104,37 @@ const SupplierForm: React.FC = () => {
 		setIsSubmitting(true);
 
 		try {
-			// Convert batch number to bytes32 for product ID
 			const productId = ethers.id(formData.batchNumber);
-
-			// Create note with all form data
 			const note = JSON.stringify({
+				materialName: formData.materialName,
 				supplierName: formData.supplierName,
+				source: formData.source,
 				supplyDate: formData.supplyDate,
 				quantity: formData.quantity,
 				unit: formData.unit,
-				source: formData.source,
 				qualityCertificate: formData.qualityCertificate,
 				storageConditions: formData.storageConditions,
-				expiryDate: formData.expiryDate,
 				contactPerson: formData.contactPerson,
 				phoneNumber: formData.phoneNumber
 			});
 
-			// Call blockchain contract
 			let tx;
 			try {
-				tx = await contract.createProduct(
-					productId,
-					formData.materialName,
-					note
-				);
+				// CORRECTED: changed addRawMaterial to createProduct
+				tx = await contract.createProduct(productId, formData.materialName, note);
 				setTxHash(tx.hash);
-				// Wait for transaction confirmation
 				await tx.wait();
 			} catch (blockchainErr: any) {
 				console.error('Blockchain transaction failed:', blockchainErr);
 				setError(`Blockchain Error: ${blockchainErr.message || 'Transaction failed'}. Attempting to sync data to database anyway...`);
-				// Continue to sync if it's a "null response" or non-fatal RPC error
 			}
 
-			// Sync to backend database regardless of blockchain confirmation if possible
 			try {
 				let name = formData.materialName;
 				let holder = account || '';
 				let stage = 1;
 				let historyArray: any[] = [];
 
-				// Try to get updated info from blockchain if tx succeeded
 				if (tx) {
 					try {
 						const [chainName, chainHolder, chainStage] = await contract.getProduct(productId);
@@ -150,19 +145,13 @@ const SupplierForm: React.FC = () => {
 
 						for (let i = 0; i < Number(historyLength); i++) {
 							const [updater, role, timestamp, note] = await contract.getUpdate(productId, i);
-							historyArray.push({
-								updater,
-								role: Number(role),
-								timestamp: Number(timestamp),
-								note
-							});
+							historyArray.push({ updater, role: Number(role), timestamp: Number(timestamp), note });
 						}
 					} catch (getInfoErr) {
 						console.warn('Could not fetch updated info from blockchain for sync:', getInfoErr);
 					}
 				}
 
-				// Sync to backend database
 				await syncProduct({
 					batchNumber: formData.batchNumber,
 					productId: productId,
@@ -183,35 +172,43 @@ const SupplierForm: React.FC = () => {
 					contactPerson: formData.contactPerson,
 					phoneNumber: formData.phoneNumber
 				} as any);
-				console.log('Product synced to database');
+
+				try {
+					await createNotification({
+						recipientRole: 'transport',
+						senderRole: 'supplier',
+						senderAddress: account || 'Unknown',
+						// CORRECTED: Use formData.source for pickup location
+						message: `New Raw Material batch #${formData.batchNumber} is ready for pickup at ${formData.source}`,
+						type: 'pickup_request',
+						batchNumber: formData.batchNumber,
+						sourceLocation: formData.source
+					});
+				} catch (notifErr) {
+					console.error('Failed to send notification:', notifErr);
+				}
 			} catch (syncErr) {
 				console.error('Failed to sync to database:', syncErr);
 				if (!error) setError('Blockchain succeeded but database sync failed. Please check backend connection.');
 			}
 
-			// Add to recent tasks
 			const newTask = {
 				type: 'raw_material' as const,
 				title: `Raw Material Added: ${formData.materialName}`,
 				description: `Added ${formData.quantity} ${formData.unit} of ${formData.materialName} from ${formData.supplierName}`,
 				status: 'completed' as const,
 				user: 'Supplier',
-				details: `Batch: ${formData.batchNumber} | Certificate: ${formData.qualityCertificate} | TX: ${tx.hash.substring(0, 10)}...`
+				// CORRECTED: Use source instead of location
+				details: `Batch: ${formData.batchNumber} | Location: ${formData.source} | TX: ${tx?.hash?.substring(0, 10)}...`
 			};
 
-			// Save to localStorage
 			const existingTasks = JSON.parse(localStorage.getItem('pharmaTasks') || '[]');
-			const taskWithId = {
-				...newTask,
-				id: Date.now().toString(),
-				timestamp: new Date().toISOString()
-			};
+			const taskWithId = { ...newTask, id: Date.now().toString(), timestamp: new Date().toISOString() };
 			localStorage.setItem('pharmaTasks', JSON.stringify([taskWithId, ...existingTasks]));
 
 			setIsSubmitting(false);
 			setSubmitted(true);
 
-			// Reset form after 3 seconds
 			setTimeout(() => {
 				setSubmitted(false);
 				setFormData({
@@ -232,278 +229,121 @@ const SupplierForm: React.FC = () => {
 			}, 3000);
 		} catch (err: any) {
 			console.error('Error creating product:', err);
-			setError(err.message || 'Failed to create product on blockchain. Make sure you have the Supplier role assigned.');
+			setError(err.message || 'Failed to create product on blockchain.');
 			setIsSubmitting(false);
-		}
-	};
-
-	const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
-		const { name, value } = e.target;
-		setFormData({
-			...formData,
-			[name]: value
-		});
-
-		// Clear field error when user starts typing
-		if (fieldErrors[name]) {
-			setFieldErrors({
-				...fieldErrors,
-				[name]: ''
-			});
 		}
 	};
 
 	if (submitted) {
 		return (
-			<div className="bg-gradient-to-br from-[#111] to-[#0d0d0d] border border-[rgba(34,197,94,0.3)] rounded-2xl p-8 text-center animation-fadeInUp hover-lift">
-				<div className="w-20 h-20 bg-gradient-to-br from-brand-green to-brand-blue rounded-full flex items-center justify-center mx-auto mb-6 animation-pulseGlow hover-scale">
-					<span className="text-3xl">✅</span>
-				</div>
-				<h3 className="text-2xl font-bold text-brand-green mb-4 animation-neonGlow">Raw Material Successfully Added!</h3>
-				<p className="text-white/80 text-lg mb-6">Your raw material has been registered in the blockchain network with cryptographic proof.</p>
+			<div className="bg-gradient-to-br from-[#111] to-[#0d0d0d] border border-[rgba(34,197,94,0.3)] rounded-2xl p-8 text-center animation-fadeInUp">
+				<h3 className="text-2xl font-bold text-brand-green mb-2">Raw Material Registered ✅</h3>
+				<p className="text-white/70">Material batch added and notification sent to transporter.</p>
 				{txHash && (
-					<p className="text-brand-blue text-sm mb-4 break-all">TX: {txHash}</p>
+					<p className="text-brand-blue text-sm mt-2 break-all">TX: {txHash}</p>
 				)}
-				<div className="bg-gradient-to-r from-brand-green/20 to-brand-blue/20 border border-brand-green/30 rounded-xl p-4">
-					<p className="text-brand-green font-semibold">✓ Blockchain transaction confirmed</p>
-					<p className="text-brand-green font-semibold">✓ Quality certificate verified</p>
-					<p className="text-brand-green font-semibold">✓ Added to recent activities</p>
-				</div>
 			</div>
 		);
 	}
 
 	return (
-		<div className="bg-gradient-to-br from-[#111] to-[#0d0d0d] border border-[rgba(34,197,94,0.2)] rounded-2xl p-8 animation-fadeInUp hover-lift transform-3d perspective-1000">
-			<div className="flex items-center mb-8">
-				<div className="w-16 h-16 bg-gradient-to-br from-brand-green/30 to-brand-blue/30 border-2 border-brand-green rounded-2xl flex items-center justify-center mr-6 animation-float hover-scale">
-					<span className="text-3xl">🏭</span>
-				</div>
+		<div className="bg-gradient-to-br from-[#111] to-[#0d0d0d] border border-[rgba(34,197,94,0.2)] rounded-2xl p-8 animation-fadeInUp">
+			<div className="flex items-center mb-6">
+				<div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-blue-600 rounded-xl flex items-center justify-center mr-4"><span>🏭</span></div>
 				<div>
-					<h2 className="text-2xl font-bold text-white mb-2">Raw Material Supply</h2>
-					<p className="text-white/70 text-base">Register and supply raw materials to pharmaceutical manufacturers</p>
+					<h2 className="text-xl font-semibold">Raw Material Entry</h2>
+					<p className="text-white/70 text-sm">Register new raw material batch</p>
 				</div>
 			</div>
 
-			{!isConnected && (
-				<div className="mb-6 p-4 bg-yellow-500/20 border border-yellow-500 rounded-xl">
-					<p className="text-yellow-500 mb-2">⚠️ Please connect your MetaMask wallet to continue</p>
-					<button
-						type="button"
-						onClick={connectWallet}
-						className="bg-brand-green text-black px-4 py-2 rounded-lg font-semibold hover:brightness-110"
-					>
-						Connect Wallet
-					</button>
-				</div>
-			)}
-			{isConnected && account && (
-				<div className="mb-6 p-4 bg-brand-green/20 border border-brand-green rounded-xl">
-					<p className="text-brand-green text-sm">Connected: {account.substring(0, 6)}...{account.substring(account.length - 4)}</p>
-				</div>
-			)}
 			{error && (
 				<div className="mb-6 p-4 bg-red-500/20 border border-red-500 rounded-xl">
 					<p className="text-red-500">{error}</p>
 				</div>
 			)}
-			<form onSubmit={handleSubmit} className="space-y-8">
-				<div className="grid md:grid-cols-2 gap-8">
-					<div className="group">
-						<label className="block text-sm font-semibold mb-3 text-white group-hover:text-brand-green transition-colors duration-300">
-							Material Name *
-						</label>
-						<input
-							type="text"
-							name="materialName"
-							value={formData.materialName}
-							onChange={handleChange}
-							required
-							className="w-full bg-gradient-to-r from-[#0d0d0d] to-[#111] border-2 border-[rgba(34,197,94,0.25)] rounded-xl px-4 py-3 outline-none focus:border-brand-green focus:shadow-lg focus:shadow-brand-green/20 transition-all duration-300 hover:border-brand-green/50 text-white placeholder-white/50 hover-lift"
-							placeholder="e.g., Paracetamol API"
-						/>
+
+			<form onSubmit={handleSubmit} className="space-y-6">
+				<div className="grid md:grid-cols-2 gap-6">
+					<div>
+						<label className="block text-sm mb-2 font-medium">Material Name *</label>
+						<input type="text" name="materialName" value={formData.materialName} onChange={handleChange} className={`w-full bg-[#0d0d0d] border ${fieldErrors.materialName ? 'border-red-500' : 'border-[rgba(34,197,94,0.25)]'} rounded-md px-3 py-2 text-white focus:outline-none focus:border-brand-green transition-colors`} placeholder="e.g., Active Pharmaceutical Ingredient" />
 						{fieldErrors.materialName && <p className="text-red-500 text-xs mt-1">{fieldErrors.materialName}</p>}
 					</div>
-					<div className="group">
-						<label className="block text-sm font-semibold mb-3 text-white group-hover:text-brand-green transition-colors duration-300">
-							Supplier Name *
-						</label>
-						<input
-							type="text"
-							name="supplierName"
-							value={formData.supplierName}
-							onChange={handleChange}
-							required
-							className="w-full bg-gradient-to-r from-[#0d0d0d] to-[#111] border-2 border-[rgba(34,197,94,0.25)] rounded-xl px-4 py-3 outline-none focus:border-brand-green focus:shadow-lg focus:shadow-brand-green/20 transition-all duration-300 hover:border-brand-green/50 text-white placeholder-white/50 hover-lift"
-							placeholder="e.g., ChemSupply Ltd"
-						/>
+					<div>
+						<label className="block text-sm mb-2 font-medium">Supplier Name *</label>
+						<input type="text" name="supplierName" value={formData.supplierName} onChange={handleChange} className={`w-full bg-[#0d0d0d] border ${fieldErrors.supplierName ? 'border-red-500' : 'border-[rgba(34,197,94,0.25)]'} rounded-md px-3 py-2 text-white focus:outline-none focus:border-brand-green transition-colors`} placeholder="PharmaCorp Industries" />
 						{fieldErrors.supplierName && <p className="text-red-500 text-xs mt-1">{fieldErrors.supplierName}</p>}
 					</div>
 				</div>
 
 				<div className="grid md:grid-cols-2 gap-6">
 					<div>
-						<label className="block text-sm font-medium mb-2">Batch Number *</label>
-						<input
-							type="text"
-							name="batchNumber"
-							value={formData.batchNumber}
-							onChange={handleChange}
-							required
-							className="w-full bg-[#0d0d0d] border border-[rgba(34,197,94,0.25)] rounded-md px-3 py-2 outline-none focus:border-brand-green transition-colors"
-							placeholder="e.g., RM-2024-001"
-						/>
-						{fieldErrors.batchNumber && <p className="text-red-500 text-xs mt-1">{fieldErrors.batchNumber}</p>}
+						<label className="block text-sm mb-2 font-medium">Source Location *</label>
+						<input type="text" name="source" value={formData.source} onChange={handleChange} className={`w-full bg-[#0d0d0d] border ${fieldErrors.source ? 'border-red-500' : 'border-[rgba(34,197,94,0.25)]'} rounded-md px-3 py-2 text-white focus:outline-none focus:border-brand-green transition-colors`} placeholder="Warehouse/Facility Location" />
+						{fieldErrors.source && <p className="text-red-500 text-xs mt-1">{fieldErrors.source}</p>}
 					</div>
 					<div>
-						<label className="block text-sm font-medium mb-2">Supply Date *</label>
-						<input
-							type="date"
-							name="supplyDate"
-							value={formData.supplyDate}
-							onChange={handleChange}
-							required
-							className="w-full bg-[#0d0d0d] border border-[rgba(34,197,94,0.25)] rounded-md px-3 py-2 outline-none focus:border-brand-green transition-colors"
-						/>
+						<label className="block text-sm mb-2 font-medium">Batch Number *</label>
+						<input type="text" name="batchNumber" value={formData.batchNumber} onChange={handleChange} className={`w-full bg-[#0d0d0d] border ${fieldErrors.batchNumber ? 'border-red-500' : 'border-[rgba(34,197,94,0.25)]'} rounded-md px-3 py-2 text-white focus:outline-none focus:border-brand-green transition-colors`} placeholder="RM-2024-001" />
+						{fieldErrors.batchNumber && <p className="text-red-500 text-xs mt-1">{fieldErrors.batchNumber}</p>}
+					</div>
+				</div>
+
+				<div className="grid md:grid-cols-3 gap-6">
+					<div>
+						<label className="block text-sm mb-2 font-medium">Quantity *</label>
+						<input type="text" name="quantity" value={formData.quantity} onChange={handleChange} className={`w-full bg-[#0d0d0d] border ${fieldErrors.quantity ? 'border-red-500' : 'border-[rgba(34,197,94,0.25)]'} rounded-md px-3 py-2 text-white focus:outline-none focus:border-brand-green transition-colors`} placeholder="1000" />
+						{fieldErrors.quantity && <p className="text-red-500 text-xs mt-1">{fieldErrors.quantity}</p>}
+					</div>
+					<div>
+						<label className="block text-sm mb-2 font-medium">Unit *</label>
+						<select name="unit" value={formData.unit} onChange={handleChange} className="w-full bg-[#0d0d0d] border border-[rgba(34,197,94,0.25)] rounded-md px-3 py-2 text-white focus:outline-none focus:border-brand-green">
+							<option value="kg">kg</option>
+							<option value="liters">liters</option>
+							<option value="units">units</option>
+						</select>
+					</div>
+					<div>
+						<label className="block text-sm mb-2 font-medium">Supply Date *</label>
+						<input type="date" name="supplyDate" value={formData.supplyDate} onChange={handleChange} className={`w-full bg-[#0d0d0d] border ${fieldErrors.supplyDate ? 'border-red-500' : 'border-[rgba(34,197,94,0.25)]'} rounded-md px-3 py-2 text-white focus:outline-none focus:border-brand-green transition-colors`} />
 						{fieldErrors.supplyDate && <p className="text-red-500 text-xs mt-1">{fieldErrors.supplyDate}</p>}
 					</div>
 				</div>
 
-				<div className="grid md:grid-cols-2 gap-6">
-					<div>
-						<label className="block text-sm font-medium mb-2">Quantity *</label>
-						<input
-							type="number"
-							name="quantity"
-							value={formData.quantity}
-							onChange={handleChange}
-							required
-							className="w-full bg-[#0d0d0d] border border-[rgba(34,197,94,0.25)] rounded-md px-3 py-2 outline-none focus:border-brand-green transition-colors"
-							placeholder="e.g., 100"
-						/>
-						{fieldErrors.quantity && <p className="text-red-500 text-xs mt-1">{fieldErrors.quantity}</p>}
-					</div>
-					<div>
-						<label className="block text-sm font-medium mb-2">Unit *</label>
-						<select
-							name="unit"
-							value={formData.unit}
-							onChange={handleChange}
-							required
-							className="w-full bg-[#0d0d0d] border border-[rgba(34,197,94,0.25)] rounded-md px-3 py-2 outline-none focus:border-brand-green transition-colors"
-						>
-							<option value="kg">Kilograms</option>
-							<option value="g">Grams</option>
-							<option value="mg">Milligrams</option>
-							<option value="liters">Liters</option>
-							<option value="ml">Milliliters</option>
-							<option value="tons">Tons</option>
-						</select>
-						{fieldErrors.unit && <p className="text-red-500 text-xs mt-1">{fieldErrors.unit}</p>}
-					</div>
-				</div>
-
 				<div>
-					<label className="block text-sm font-medium mb-2">Source Location *</label>
-					<input
-						type="text"
-						name="source"
-						value={formData.source}
-						onChange={handleChange}
-						required
-						className="w-full bg-[#0d0d0d] border border-[rgba(34,197,94,0.25)] rounded-md px-3 py-2 outline-none focus:border-brand-green transition-colors"
-						placeholder="e.g., Mumbai, Maharashtra, India"
-					/>
-					{fieldErrors.source && <p className="text-red-500 text-xs mt-1">{fieldErrors.source}</p>}
+					<label className="block text-sm mb-2 font-medium">Expiry Date *</label>
+					<input type="date" name="expiryDate" value={formData.expiryDate} onChange={handleChange} className={`w-full bg-[#0d0d0d] border ${fieldErrors.expiryDate ? 'border-red-500' : 'border-[rgba(34,197,94,0.25)]'} rounded-md px-3 py-2 text-white focus:outline-none focus:border-brand-green transition-colors`} />
+					{fieldErrors.expiryDate && <p className="text-red-500 text-xs mt-1">{fieldErrors.expiryDate}</p>}
 				</div>
 
 				<div className="grid md:grid-cols-2 gap-6">
 					<div>
-						<label className="block text-sm font-medium mb-2">Quality Certificate *</label>
-						<input
-							type="text"
-							name="qualityCertificate"
-							value={formData.qualityCertificate}
-							onChange={handleChange}
-							required
-							className="w-full bg-[#0d0d0d] border border-[rgba(34,197,94,0.25)] rounded-md px-3 py-2 outline-none focus:border-brand-green transition-colors"
-							placeholder="e.g., QC-CERT-2024-001"
-						/>
-						{fieldErrors.qualityCertificate && <p className="text-red-500 text-xs mt-1">{fieldErrors.qualityCertificate}</p>}
-					</div>
-					<div>
-						<label className="block text-sm font-medium mb-2">Expiry Date *</label>
-						<input
-							type="date"
-							name="expiryDate"
-							value={formData.expiryDate}
-							onChange={handleChange}
-							required
-							className="w-full bg-[#0d0d0d] border border-[rgba(34,197,94,0.25)] rounded-md px-3 py-2 outline-none focus:border-brand-green transition-colors"
-						/>
-						{fieldErrors.expiryDate && <p className="text-red-500 text-xs mt-1">{fieldErrors.expiryDate}</p>}
-					</div>
-				</div>
-
-				<div>
-					<label className="block text-sm font-medium mb-2">Storage Conditions *</label>
-					<textarea
-						name="storageConditions"
-						value={formData.storageConditions}
-						onChange={handleChange}
-						required
-						rows={2}
-						className="w-full bg-[#0d0d0d] border border-[rgba(34,197,94,0.25)] rounded-md px-3 py-2 outline-none focus:border-brand-green transition-colors"
-						placeholder="e.g., Store in cool, dry place below 25°C"
-					/>
-					{fieldErrors.storageConditions && <p className="text-red-500 text-xs mt-1">{fieldErrors.storageConditions}</p>}
-				</div>
-
-				<div className="grid md:grid-cols-2 gap-6">
-					<div>
-						<label className="block text-sm font-medium mb-2">Contact Person *</label>
-						<input
-							type="text"
-							name="contactPerson"
-							value={formData.contactPerson}
-							onChange={handleChange}
-							required
-							className="w-full bg-[#0d0d0d] border border-[rgba(34,197,94,0.25)] rounded-md px-3 py-2 outline-none focus:border-brand-green transition-colors"
-							placeholder="e.g., John Smith"
-						/>
+						<label className="block text-sm mb-2 font-medium">Contact Person *</label>
+						<input type="text" name="contactPerson" value={formData.contactPerson} onChange={handleChange} className={`w-full bg-[#0d0d0d] border ${fieldErrors.contactPerson ? 'border-red-500' : 'border-[rgba(34,197,94,0.25)]'} rounded-md px-3 py-2 text-white focus:outline-none focus:border-brand-green transition-colors`} placeholder="John Doe" />
 						{fieldErrors.contactPerson && <p className="text-red-500 text-xs mt-1">{fieldErrors.contactPerson}</p>}
 					</div>
 					<div>
-						<label className="block text-sm font-medium mb-2">Phone Number *</label>
-						<input
-							type="tel"
-							name="phoneNumber"
-							value={formData.phoneNumber}
-							onChange={handleChange}
-							required
-							className="w-full bg-[#0d0d0d] border border-[rgba(34,197,94,0.25)] rounded-md px-3 py-2 outline-none focus:border-brand-green transition-colors"
-							placeholder="e.g., +91 98765 43210"
-						/>
+						<label className="block text-sm mb-2 font-medium">Phone Number *</label>
+						<input type="text" name="phoneNumber" value={formData.phoneNumber} onChange={handleChange} className={`w-full bg-[#0d0d0d] border ${fieldErrors.phoneNumber ? 'border-red-500' : 'border-[rgba(34,197,94,0.25)]'} rounded-md px-3 py-2 text-white focus:outline-none focus:border-brand-green transition-colors`} placeholder="+91 9876543210" />
 						{fieldErrors.phoneNumber && <p className="text-red-500 text-xs mt-1">{fieldErrors.phoneNumber}</p>}
 					</div>
 				</div>
 
-				<button
-					type="submit"
-					disabled={isSubmitting}
-					className="w-full bg-gradient-to-r from-brand-green to-brand-blue text-black rounded-xl py-4 font-bold text-lg hover:brightness-110 transition-all duration-300 animation-pulseGlow disabled:opacity-50 disabled:cursor-not-allowed hover-lift hover-scale transform-3d perspective-1000"
-				>
-					{isSubmitting ? (
-						<div className="flex items-center justify-center">
-							<div className="w-6 h-6 border-3 border-black border-t-transparent rounded-full animate-spin mr-3"></div>
-							<span className="text-lg">Adding Raw Material to Blockchain...</span>
-						</div>
-					) : (
-						<div className="flex items-center justify-center">
-							<span className="text-lg mr-2">🏭</span>
-							<span>Supply Raw Material to System</span>
-						</div>
-					)}
+				<div className="grid md:grid-cols-2 gap-6">
+					<div>
+						<label className="block text-sm mb-2 font-medium">Quality Certificate *</label>
+						<input type="text" name="qualityCertificate" value={formData.qualityCertificate} onChange={handleChange} className={`w-full bg-[#0d0d0d] border ${fieldErrors.qualityCertificate ? 'border-red-500' : 'border-[rgba(34,197,94,0.25)]'} rounded-md px-3 py-2 text-white focus:outline-none focus:border-brand-green transition-colors`} placeholder="CERT-12345" />
+						{fieldErrors.qualityCertificate && <p className="text-red-500 text-xs mt-1">{fieldErrors.qualityCertificate}</p>}
+					</div>
+					<div>
+						<label className="block text-sm mb-2 font-medium">Storage Conditions *</label>
+						<input type="text" name="storageConditions" value={formData.storageConditions} onChange={handleChange} className={`w-full bg-[#0d0d0d] border ${fieldErrors.storageConditions ? 'border-red-500' : 'border-[rgba(34,197,94,0.25)]'} rounded-md px-3 py-2 text-white focus:outline-none focus:border-brand-green transition-colors`} placeholder="e.g., Cool and dry place" />
+						{fieldErrors.storageConditions && <p className="text-red-500 text-xs mt-1">{fieldErrors.storageConditions}</p>}
+					</div>
+				</div>
+
+				<button type="submit" disabled={isSubmitting} className="w-full bg-brand-green text-black rounded-md py-3 font-semibold hover:brightness-110 disabled:opacity-50 transition-all animation-pulseGlow">
+					{isSubmitting ? 'Registering Material...' : 'Register Raw Material'}
 				</button>
 			</form>
 		</div>
@@ -511,4 +351,3 @@ const SupplierForm: React.FC = () => {
 };
 
 export default SupplierForm;
-

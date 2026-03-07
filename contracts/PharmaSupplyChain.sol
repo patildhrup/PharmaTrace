@@ -124,8 +124,16 @@ contract PharmaSupplyChain {
         emit ProductUpdated(id, p.stage, msg.sender);
     }
 
-    /// @notice Transporter delivers product to next participant
-    function transporterDeliver(bytes32 id, string calldata location, string calldata note) external onlyRole(Role.Transporter) productExists(id) {
+    /// @notice Recipient confirms delivery of product from transporter
+    function confirmDelivery(bytes32 id, string calldata location, string calldata note) external productExists(id) {
+        Role callerRole = roles[msg.sender];
+        require(
+            callerRole == Role.Manufacturer || 
+            callerRole == Role.Distributor || 
+            callerRole == Role.Retailer,
+            "Only recipient can confirm delivery"
+        );
+        
         Product storage p = products[id];
         require(p.status == BatchStatus.InProgress, "Product not in transit");
         
@@ -133,7 +141,7 @@ contract PharmaSupplyChain {
         
         p.history.push(Update({
             updater: msg.sender,
-            role: Role.Transporter,
+            role: callerRole,
             timestamp: block.timestamp,
             note: note
         }));

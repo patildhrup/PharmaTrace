@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { useWeb3 } from '../contexts/Web3Context';
 import { ethers } from 'ethers';
-import { syncProduct } from '../services/api';
+import { syncProduct, createNotification } from '../services/api';
 import { z } from 'zod';
+import ConfirmDelivery from './ConfirmDelivery';
 
 const retailerSchema = z.object({
 	invoiceNumber: z.string().min(1, 'Invoice Number is required'),
@@ -92,7 +93,7 @@ const RetailerForm: React.FC = () => {
 				const tx1 = await contract.receiveByRetailer(productId, note);
 				await tx1.wait();
 
-				tx2 = await contract.markSold(productId, `Sold to ${formData.buyerName}`);
+				tx2 = await contract.markSold(productId, `Sold to ${formData.buyerName} `);
 				setTxHash(tx2.hash);
 				await tx2.wait();
 			} catch (blockchainErr: any) {
@@ -138,6 +139,23 @@ const RetailerForm: React.FC = () => {
 					txHash: tx2?.hash || 'OFF-CHAIN-SYNC'
 				});
 				console.log('Product sync successful');
+
+				// Notify Transport (if needed) or just log
+				// In retailer case, maybe it's the end of the chain, 
+				// but let's add a general notification for record
+				try {
+					await createNotification({
+						recipientRole: 'consumer',
+						senderRole: 'retailer',
+						senderAddress: account || 'Unknown',
+						message: `Batch #${formData.batchNumber} has been sold and is ready for verification`,
+						type: 'info',
+						batchNumber: formData.batchNumber
+					});
+					console.log('Sale notification created');
+				} catch (notifErr) {
+					console.error('Failed to create notification:', notifErr);
+				}
 			} catch (syncErr) {
 				console.error('Failed to sync to database:', syncErr);
 				if (!error) setError('Blockchain interaction had issues and database sync failed. Please check backend connection.');
@@ -227,6 +245,9 @@ const RetailerForm: React.FC = () => {
 				</div>
 				<button type="submit" disabled={isSubmitting} className="w-full bg-brand-green text-black rounded-md py-3 font-semibold hover:brightness-110 disabled:opacity-50">{isSubmitting ? 'Saving...' : 'Save Retail Sale'}</button>
 			</form>
+
+			{/* Deliver confirmation for incoming shipments */}
+			<ConfirmDelivery role="retailer" />
 		</div>
 	);
 };
