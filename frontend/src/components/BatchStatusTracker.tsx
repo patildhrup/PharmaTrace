@@ -39,9 +39,8 @@ const BatchStatusTracker: React.FC<BatchStatusTrackerProps> = ({ batchNumber, pr
                 if (provider) {
                     const code = await provider.getCode(await contract.getAddress());
                     if (code === '0x' || code === '0x0') {
-                        if (isMounted) {
-                            setError('Contract not found at address');
-                        }
+                        // Silent failure for contract check as requested
+                        setLoading(false);
                         return;
                     }
                 }

@@ -29,7 +29,6 @@ router.post('/', async (req, res) => {
         const coreProductData = {
             batchNumber: productData.batchNumber,
             productId: productData.productId,
-            name: productData.name,
             currentHolder: productData.currentHolder,
             stage: productData.stage,
             updatesCount: productData.updatesCount,
@@ -38,6 +37,20 @@ router.post('/', async (req, res) => {
             txHash: productData.txHash,
             lastSynced: new Date()
         };
+
+        // If manufacturer data is present, update the main product info with drug details
+        if (productData.manufacturerName) {
+            coreProductData.name = productData.drugName || productData.name;
+            coreProductData.drugName = productData.drugName;
+            coreProductData.manufacturingDate = productData.manufacturingDate;
+            coreProductData.expiryDate = productData.expiryDate;
+            coreProductData.quantity = productData.quantity;
+            coreProductData.unit = productData.unit;
+            coreProductData.ingredients = productData.ingredients;
+            coreProductData.manufacturerName = productData.manufacturerName;
+            coreProductData.licenseNumber = productData.licenseNumber;
+            coreProductData.qualityGrade = productData.qualityGrade;
+        }
 
         const product = await Product.findOneAndUpdate(
             { batchNumber },

@@ -10,7 +10,7 @@ const updateSchema = new mongoose.Schema({
 const productSchema = new mongoose.Schema({
     batchNumber: { type: String, required: true, unique: true },
     productId: { type: String, required: true },
-    name: { type: String, required: true },
+    name: { type: String, default: 'Pending Manufacture' },
     currentHolder: { type: String, required: true },
     stage: { type: Number, required: true },
     updatesCount: { type: Number, required: true },

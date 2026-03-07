@@ -372,14 +372,6 @@ const Verify: React.FC = () => {
 					</div>
 				)}
 
-				{dataSource && (
-					<div className="mb-6 p-4 bg-blue-500/20 border border-blue-500 rounded-xl">
-						<p className="text-blue-500 text-sm">
-							📊 Data source: <span className="font-semibold">{dataSource === 'database' ? 'Database (MongoDB)' : 'Blockchain'}</span>
-							{dataSource === 'blockchain' && apiAvailable && <span className="ml-2 text-xs">(Syncing to database...)</span>}
-						</p>
-					</div>
-				)}
 
 				{error && (
 					<div className="mb-6 p-4 bg-red-500/20 border border-red-500 rounded-xl">
@@ -490,7 +482,7 @@ const Verify: React.FC = () => {
 								</div>
 								<div>
 									<p className="text-white font-semibold">Immutable Blockchain Proof</p>
-									<p className="text-white/50 text-xs">Verified via Smart Contract at {contract?.target?.toString().substring(0, 10)}...</p>
+									<p className="text-white/50 text-xs">Verified via Smart Contract</p>
 								</div>
 							</div>
 							<div className="text-right">
