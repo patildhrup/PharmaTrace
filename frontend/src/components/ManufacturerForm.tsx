@@ -164,6 +164,7 @@ const ManufacturerForm: React.FC = () => {
 				});
 
 				try {
+					// 1. Notify Transporter (Pickup Request)
 					await createNotification({
 						recipientRole: 'transport',
 						senderRole: 'manufacturer',
@@ -173,8 +174,28 @@ const ManufacturerForm: React.FC = () => {
 						batchNumber: formData.batchNumber,
 						sourceLocation: formData.location
 					});
+
+					// 2. Notify Sender (Manufacturer - Record of execution)
+					await createNotification({
+						recipientRole: 'manufacturer',
+						senderRole: 'manufacturer',
+						senderAddress: account || 'Unknown',
+						message: `Batch #${formData.batchNumber} has been successfully registered and prepared for distribution.`,
+						type: 'info',
+						batchNumber: formData.batchNumber
+					});
+
+					// 3. Notify Next Participant (Distributor - Alert of incoming)
+					await createNotification({
+						recipientRole: 'distributor',
+						senderRole: 'manufacturer',
+						senderAddress: account || 'Unknown',
+						message: `Incoming batch alert: #${formData.batchNumber} (${formData.drugName}) is being processed for your center.`,
+						type: 'info',
+						batchNumber: formData.batchNumber
+					});
 				} catch (notifErr) {
-					console.error('Failed to send notification:', notifErr);
+					console.error('Failed to send notifications:', notifErr);
 				}
 			} catch (syncErr) {
 				console.error('Failed to sync to database:', syncErr);

@@ -144,17 +144,28 @@ const RetailerForm: React.FC = () => {
 				// In retailer case, maybe it's the end of the chain, 
 				// but let's add a general notification for record
 				try {
+					// 1. Notify Sender (Retailer - Record of execution)
+					await createNotification({
+						recipientRole: 'retailer',
+						senderRole: 'retailer',
+						senderAddress: account || 'Unknown',
+						message: `Batch #${formData.batchNumber} sale successfully recorded.`,
+						type: 'info',
+						batchNumber: formData.batchNumber
+					});
+
+					// 2. Notify Next Participant (Consumer - for verification)
 					await createNotification({
 						recipientRole: 'consumer',
 						senderRole: 'retailer',
 						senderAddress: account || 'Unknown',
-						message: `Batch #${formData.batchNumber} has been sold and is ready for verification`,
+						message: `Your drug batch #${formData.batchNumber} has been delivered and is ready for verification`,
 						type: 'info',
 						batchNumber: formData.batchNumber
 					});
-					console.log('Sale notification created');
+					console.log('Sale notifications created');
 				} catch (notifErr) {
-					console.error('Failed to create notification:', notifErr);
+					console.error('Failed to create notifications:', notifErr);
 				}
 			} catch (syncErr) {
 				console.error('Failed to sync to database:', syncErr);
