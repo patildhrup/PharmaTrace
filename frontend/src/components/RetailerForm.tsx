@@ -167,6 +167,21 @@ const RetailerForm: React.FC = () => {
 				} catch (notifErr) {
 					console.error('Failed to create notifications:', notifErr);
 				}
+
+				// Record to local Recent Activities
+				const newTask = {
+					type: 'shipment' as const,
+					title: `Retail Sale: #${formData.batchNumber}`,
+					description: `Sold ${formData.quantitySold} units to ${formData.buyerName}`,
+					status: 'completed' as const,
+					user: 'Retailer',
+					details: `Batch: ${formData.batchNumber} | Invoice: ${formData.invoiceNumber} | TX: ${tx2?.hash?.substring(0, 10)}...`
+				};
+
+				const existingTasks = JSON.parse(localStorage.getItem('pharmaTasks') || '[]');
+				const taskWithId = { ...newTask, id: Date.now().toString(), timestamp: new Date().toISOString() };
+				localStorage.setItem('pharmaTasks', JSON.stringify([taskWithId, ...existingTasks]));
+
 			} catch (syncErr) {
 				console.error('Failed to sync to database:', syncErr);
 				if (!error) setError('Blockchain interaction had issues and database sync failed. Please check backend connection.');

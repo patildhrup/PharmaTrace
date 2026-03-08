@@ -204,6 +204,21 @@ const TransportForm: React.FC<TransportProps> = ({ prefilledBatch, prefilledLoca
 				} catch (notifErr) {
 					console.error('Failed to send transport notifications:', notifErr);
 				}
+
+				// Record to local Recent Activities
+				const newTask = {
+					type: 'shipment' as const,
+					title: `Pickup Recorded: #${formData.batchNumber}`,
+					description: `Transporter picked up batch from ${formData.fromEntity} for ${formData.toEntity}`,
+					status: 'completed' as const,
+					user: 'Transport',
+					details: `Batch: ${formData.batchNumber} | Vehicle: ${formData.vehicleId} | TX: ${tx?.hash?.substring(0, 10)}...`
+				};
+
+				const existingTasks = JSON.parse(localStorage.getItem('pharmaTasks') || '[]');
+				const taskWithId = { ...newTask, id: Date.now().toString(), timestamp: new Date().toISOString() };
+				localStorage.setItem('pharmaTasks', JSON.stringify([taskWithId, ...existingTasks]));
+
 			} catch (syncErr) {
 				console.error('Failed to sync to database:', syncErr);
 				if (!error) setError('Blockchain interaction had issues and database sync failed. Please check backend connection.');

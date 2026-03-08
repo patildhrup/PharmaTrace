@@ -11,6 +11,7 @@ import RoleDashboard from './pages/RoleDashboard';
 import RoleLogin from './pages/RoleLogin';
 import Verify from './pages/Verify';
 import MedicineDetails from './pages/MedicineDetails';
+import ParticipantsDashboard from './pages/ParticipantsDashboard';
 
 const App: React.FC = () => {
 	return (
@@ -28,6 +29,7 @@ const App: React.FC = () => {
 								<Route path="/role-login" element={<RoleLogin />} />
 								<Route path="/admin-login" element={<AdminLogin />} />
 								<Route path="/admin-dashboard" element={<AdminDashboard />} />
+								<Route path="/participants-dashboard" element={<ParticipantsDashboard />} />
 								<Route path="/role-dashboard/:roleId" element={<RoleDashboard />} />
 								<Route path="/verify/:batchId" element={<Verify />} />
 								<Route path="/medicine-details/:batchId" element={<MedicineDetails />} />

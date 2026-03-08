@@ -171,6 +171,21 @@ const DistributorForm: React.FC = () => {
 				} catch (notifErr) {
 					console.error('Failed to send notifications:', notifErr);
 				}
+
+				// Record to local Recent Activities
+				const newTask = {
+					type: 'shipment' as const,
+					title: `Batch Distributed: #${formData.batchNumber}`,
+					description: `Dispatched ${formData.packages} to ${formData.destinationCenter} via ${formData.carrier}`,
+					status: 'completed' as const,
+					user: 'Distributor',
+					details: `Batch: ${formData.batchNumber} | Hub: ${formData.location} | TX: ${tx?.hash?.substring(0, 10)}...`
+				};
+
+				const existingTasks = JSON.parse(localStorage.getItem('pharmaTasks') || '[]');
+				const taskWithId = { ...newTask, id: Date.now().toString(), timestamp: new Date().toISOString() };
+				localStorage.setItem('pharmaTasks', JSON.stringify([taskWithId, ...existingTasks]));
+
 			} catch (syncErr) {
 				console.error('Failed to sync to database:', syncErr);
 				if (!error) setError('Blockchain interaction had issues and database sync failed. Please check backend connection.');

@@ -238,12 +238,7 @@ const RoleDashboard: React.FC = () => {
 				<div className="max-w-7xl mx-auto px-4 py-6">
 					<div className="flex justify-between items-center">
 						<div className="flex items-center">
-							<button
-								onClick={() => navigate('/admin-dashboard')}
-								className="mr-4 text-brand-green hover:text-white transition-colors"
-							>
-								← Back to Admin
-							</button>
+
 							<div className={`w-12 h-12 bg-gradient-to-r ${roleData.color} rounded-full flex items-center justify-center mr-4`}>
 								<span className="text-xl">{roleData.icon}</span>
 							</div>
