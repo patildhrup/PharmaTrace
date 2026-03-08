@@ -88,11 +88,7 @@ const RoleDashboard: React.FC = () => {
 					{ label: 'Quality Score', value: '98.5%', change: '+2.1%' },
 					{ label: 'Pending Orders', value: '23', change: '-5%' }
 				],
-				recentActivities: [
-					{ id: '1', action: 'Raw Material Batch #RM-001 delivered', timestamp: '2 hours ago', status: 'completed' },
-					{ id: '2', action: 'Quality inspection for Batch #RM-002', timestamp: '4 hours ago', status: 'pending' },
-					{ id: '3', action: 'New supplier registration: PharmaCorp', timestamp: '1 day ago', status: 'completed' }
-				]
+				recentActivities: []
 			},
 			manufacturer: {
 				id: 'manufacturer',
@@ -105,11 +101,7 @@ const RoleDashboard: React.FC = () => {
 					{ label: 'Quality Compliance', value: '99.2%', change: '+0.8%' },
 					{ label: 'Batch Failures', value: '3', change: '-67%' }
 				],
-				recentActivities: [
-					{ id: '1', action: 'Paracetamol Batch #PCM-2024-001 completed', timestamp: '1 hour ago', status: 'completed' },
-					{ id: '2', action: 'Amoxicillin production started', timestamp: '3 hours ago', status: 'in-progress' },
-					{ id: '3', action: 'Quality control for Batch #AMX-2024-002', timestamp: '6 hours ago', status: 'pending' }
-				]
+				recentActivities: []
 			},
 			distributor: {
 				id: 'distributor',
@@ -122,11 +114,7 @@ const RoleDashboard: React.FC = () => {
 					{ label: 'Delivery Success Rate', value: '97.8%', change: '+1.2%' },
 					{ label: 'Pending Shipments', value: '156', change: '-12%' }
 				],
-				recentActivities: [
-					{ id: '1', action: 'Shipment to Delhi Distribution Center', timestamp: '30 minutes ago', status: 'in-transit' },
-					{ id: '2', action: 'Batch #PCM-2024-001 received from manufacturer', timestamp: '2 hours ago', status: 'completed' },
-					{ id: '3', action: 'Quality check for incoming shipment', timestamp: '4 hours ago', status: 'pending' }
-				]
+				recentActivities: []
 			},
 			transport: {
 				id: 'transport',
@@ -139,11 +127,7 @@ const RoleDashboard: React.FC = () => {
 					{ label: 'On-Time Delivery', value: '94.5%', change: '+2.1%' },
 					{ label: 'Temperature Violations', value: '2', change: '-50%' }
 				],
-				recentActivities: [
-					{ id: '1', action: 'Vehicle #TR-001 departed for Mumbai', timestamp: '1 hour ago', status: 'in-transit' },
-					{ id: '2', action: 'Temperature monitoring alert resolved', timestamp: '3 hours ago', status: 'completed' },
-					{ id: '3', action: 'New route optimization applied', timestamp: '1 day ago', status: 'completed' }
-				]
+				recentActivities: []
 			},
 			retailer: {
 				id: 'retailer',
@@ -156,11 +140,7 @@ const RoleDashboard: React.FC = () => {
 					{ label: 'Customer Satisfaction', value: '96.8%', change: '+1.5%' },
 					{ label: 'Expired Drugs', value: '12', change: '-25%' }
 				],
-				recentActivities: [
-					{ id: '1', action: 'Apollo Pharmacy received new stock', timestamp: '45 minutes ago', status: 'completed' },
-					{ id: '2', action: 'Expiry alert for Batch #PCM-2023-045', timestamp: '2 hours ago', status: 'pending' },
-					{ id: '3', action: 'Customer verification for prescription', timestamp: '3 hours ago', status: 'completed' }
-				]
+				recentActivities: []
 			},
 			consumer: {
 				id: 'consumer',
@@ -173,11 +153,7 @@ const RoleDashboard: React.FC = () => {
 					{ label: 'Alerts Received', value: '0', change: '0' },
 					{ label: 'Batches Viewed', value: '72', change: '+8%' }
 				],
-				recentActivities: [
-					{ id: '1', action: 'Scanned QR for Paracetamol 500mg', timestamp: '10 minutes ago', status: 'completed' },
-					{ id: '2', action: 'Viewed chain of custody for Batch #PCM-2024-001', timestamp: '20 minutes ago', status: 'completed' },
-					{ id: '3', action: 'Checked retailer authenticity', timestamp: '30 minutes ago', status: 'completed' }
-				]
+				recentActivities: []
 			}
 		};
 

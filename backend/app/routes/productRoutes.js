@@ -173,6 +173,69 @@ router.get('/batch/:batchNumber', async (req, res) => {
     }
 });
 
+// @route   GET /api/products/stats
+// @desc    Get aggregate statistics for the dashboard
+router.get('/stats', async (req, res) => {
+    try {
+        const [
+            totalProducts,
+            supplierLogs,
+            manufacturerLogs,
+            distributorLogs,
+            transporterLogs,
+            retailerLogs
+        ] = await Promise.all([
+            Product.countDocuments(),
+            SupplierLog.countDocuments(),
+            ManufacturerLog.countDocuments(),
+            DistributorLog.countDocuments(),
+            TransporterLog.countDocuments(),
+            RetailerLog.countDocuments()
+        ]);
+
+        res.json({
+            totalProducts,
+            supplierCount: supplierLogs,
+            manufacturerCount: manufacturerLogs,
+            distributorCount: distributorLogs,
+            transporterCount: transporterLogs,
+            retailerCount: retailerLogs
+        });
+    } catch (error) {
+        console.error('Error fetching stats:', error);
+        res.status(500).json({ message: 'Server error' });
+    }
+});
+
+// @route   GET /api/products/recent-activities
+// @desc    Get recent activities across all roles
+router.get('/recent-activities', async (req, res) => {
+    try {
+        // Fetch last 5 from each and combine then sort (simplification for now)
+        const [s, m, d, t, r] = await Promise.all([
+            SupplierLog.find().sort({ createdAt: -1 }).limit(5),
+            ManufacturerLog.find().sort({ createdAt: -1 }).limit(5),
+            DistributorLog.find().sort({ createdAt: -1 }).limit(5),
+            TransporterLog.find().sort({ createdAt: -1 }).limit(5),
+            RetailerLog.find().sort({ createdAt: -1 }).limit(5)
+        ]);
+
+        const activities = [
+            ...s.map(l => ({ ...l._doc, role: 'Supplier', action: `Material: ${l.materialName}`, timestamp: l.createdAt })),
+            ...m.map(l => ({ ...l._doc, role: 'Manufacturer', action: `Drug: ${l.drugName}`, timestamp: l.createdAt })),
+            ...d.map(l => ({ ...l._doc, role: 'Distributor', action: `Dispatched to: ${l.destinationCenter}`, timestamp: l.createdAt })),
+            ...t.map(l => ({ ...l._doc, role: 'Transport', action: `${l.action} Batch: ${l.batchNumber}`, timestamp: l.createdAt })),
+            ...r.map(l => ({ ...l._doc, role: 'Retailer', action: `Sold Batch: ${l.batchNumber}`, timestamp: l.createdAt }))
+        ];
+
+        activities.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+        res.json(activities.slice(0, 10));
+    } catch (error) {
+        console.error('Error fetching activities:', error);
+        res.status(500).json({ message: 'Server error' });
+    }
+});
+
 // @route   GET /api/health
 // @desc    Health check
 router.get('/health', (req, res) => {

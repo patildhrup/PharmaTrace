@@ -164,6 +164,20 @@ export const updateNotificationStatus = async (id: string, status: 'pending' | '
   return response.json();
 };
 
+// Global Stats for Admin Analysis
+export const getGlobalStats = async (): Promise<any> => {
+  const response = await fetch(`${API_BASE_URL}/products/stats`);
+  if (!response.ok) return { totalProducts: 0, supplierCount: 0, manufacturerCount: 0, distributorCount: 0, transporterCount: 0, retailerCount: 0 };
+  return response.json();
+};
+
+// Global Recent Activities for Admin Analysis
+export const getRecentGlobalActivities = async (): Promise<any[]> => {
+  const response = await fetch(`${API_BASE_URL}/products/recent-activities`);
+  if (!response.ok) return [];
+  return response.json();
+};
+
 // Health check
 export const checkApiHealth = async (): Promise<boolean> => {
   try {

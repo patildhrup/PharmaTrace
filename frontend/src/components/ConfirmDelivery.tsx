@@ -74,6 +74,21 @@ const ConfirmDelivery: React.FC<ConfirmDeliveryProps> = ({ role }) => {
                 console.error('Failed to notify transporter:', notifErr);
             }
 
+            // Record to local Recent Activities
+            const newTask = {
+                id: Date.now().toString(),
+                type: 'shipment' as const,
+                title: `Delivery Confirmed: #${batchNumber}`,
+                description: `Confirmed receipt of batch at ${location} for role ${role}`,
+                status: 'completed' as const,
+                user: role.charAt(0).toUpperCase() + role.slice(1),
+                details: `Batch: ${batchNumber} | Location: ${location} | TX: ${tx.hash.substring(0, 10)}...`,
+                timestamp: new Date().toISOString()
+            };
+
+            const existingTasks = JSON.parse(localStorage.getItem('pharmaTasks') || '[]');
+            localStorage.setItem('pharmaTasks', JSON.stringify([newTask, ...existingTasks]));
+
             setStatus('success');
             setBatchNumber('');
             setLocation('');
