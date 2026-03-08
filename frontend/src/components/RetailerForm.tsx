@@ -1,6 +1,19 @@
 import React, { useState } from 'react';
 import { useWeb3 } from '../contexts/Web3Context';
 import { ethers } from 'ethers';
+import { syncProduct, createNotification } from '../services/api';
+import { z } from 'zod';
+import ConfirmDelivery from './ConfirmDelivery';
+
+const retailerSchema = z.object({
+	invoiceNumber: z.string().min(1, 'Invoice Number is required'),
+	batchNumber: z.string().min(1, 'Batch Number is required'),
+	quantitySold: z.string().refine((val) => !isNaN(Number(val)) && Number(val) > 0, {
+		message: 'Quantity must be a positive number',
+	}),
+	buyerName: z.string().min(1, 'Buyer Name is required'),
+	saleDate: z.string().min(1, 'Sale Date is required'),
+});
 
 interface RetailerFormData {
 	invoiceNumber: string;
@@ -23,16 +36,35 @@ const RetailerForm: React.FC = () => {
 	const [submitted, setSubmitted] = useState(false);
 	const { contract, isConnected, connectWallet, account } = useWeb3();
 	const [error, setError] = useState<string | null>(null);
+	const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 	const [txHash, setTxHash] = useState<string | null>(null);
 
 	const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-		setFormData({ ...formData, [e.target.name]: e.target.value });
+		const { name, value } = e.target;
+		setFormData({ ...formData, [name]: value });
+		if (fieldErrors[name]) {
+			setFieldErrors({ ...fieldErrors, [name]: '' });
+		}
 	};
 
 	const handleSubmit = async (e: React.FormEvent) => {
 		e.preventDefault();
 		setError(null);
+		setFieldErrors({});
 		setTxHash(null);
+
+		// Zod Validation
+		const result = retailerSchema.safeParse(formData);
+		if (!result.success) {
+			const errors: Record<string, string> = {};
+			result.error.issues.forEach((issue) => {
+				if (issue.path.length > 0) {
+					errors[issue.path[0].toString()] = issue.message;
+				}
+			});
+			setFieldErrors(errors);
+			return;
+		}
 
 		if (!isConnected || !contract) {
 			try {
@@ -45,7 +77,7 @@ const RetailerForm: React.FC = () => {
 		}
 
 		setIsSubmitting(true);
-		
+
 		try {
 			const productId = ethers.id(formData.batchNumber);
 			const note = JSON.stringify({
@@ -56,26 +88,104 @@ const RetailerForm: React.FC = () => {
 			});
 
 			// First receive by retailer, then mark as sold
-			const tx1 = await contract.receiveByRetailer(productId, note);
-			await tx1.wait();
-			
-			const tx2 = await contract.markSold(productId, `Sold to ${formData.buyerName}`);
-			setTxHash(tx2.hash);
-			await tx2.wait();
+			let tx2;
+			try {
+				const tx1 = await contract.receiveByRetailer(productId, note);
+				await tx1.wait();
 
-			const newTask = {
-				type: 'retail' as const,
-				title: `Retail Sale: ${formData.batchNumber}`,
-				description: `${formData.quantitySold} units sold to ${formData.buyerName}`,
-				status: 'completed' as const,
-				user: 'Retailer',
-				details: `Invoice ${formData.invoiceNumber} on ${formData.saleDate} | TX: ${tx2.hash.substring(0, 10)}...`
-			};
-			const existing = JSON.parse(localStorage.getItem('pharmaTasks') || '[]');
-			localStorage.setItem('pharmaTasks', JSON.stringify([
-				{ ...newTask, id: Date.now().toString(), timestamp: new Date().toISOString() },
-				...existing
-			]));
+				tx2 = await contract.markSold(productId, `Sold to ${formData.buyerName} `);
+				setTxHash(tx2.hash);
+				await tx2.wait();
+			} catch (blockchainErr: any) {
+				console.error('Blockchain transaction failed:', blockchainErr);
+				setError(`Blockchain Error: ${blockchainErr.message || 'Transaction failed'}. Attempting to sync data to database anyway...`);
+			}
+
+			// Sync to backend database regardless of blockchain confirmation if possible
+			try {
+				let name = 'Product';
+				let holder = account || '';
+				let stage = 6; // Retail stage
+				let historyArray: any[] = [];
+
+				// Try to get updated info from blockchain
+				try {
+					const [chainName, chainHolder, chainStage] = await contract.getProduct(productId);
+					const historyLength = await contract.getHistoryLength(productId);
+					name = chainName;
+					holder = chainHolder;
+					stage = Number(chainStage);
+
+					for (let i = 0; i < Number(historyLength); i++) {
+						const [updater, role, timestamp, note] = await contract.getUpdate(productId, i);
+						historyArray.push({ updater, role: Number(role), timestamp: Number(timestamp), note });
+					}
+				} catch (getInfoErr) {
+					console.warn('Could not fetch updated info from blockchain for sync:', getInfoErr);
+				}
+
+				await syncProduct({
+					batchNumber: formData.batchNumber,
+					productId: productId,
+					name,
+					currentHolder: holder,
+					stage: stage,
+					history: historyArray,
+					exists: true,
+					invoiceNumber: formData.invoiceNumber,
+					buyerName: formData.buyerName,
+					saleDate: formData.saleDate,
+					quantitySold: formData.quantitySold,
+					txHash: tx2?.hash || 'OFF-CHAIN-SYNC'
+				});
+				console.log('Product sync successful');
+
+				// Notify Transport (if needed) or just log
+				// In retailer case, maybe it's the end of the chain, 
+				// but let's add a general notification for record
+				try {
+					// 1. Notify Sender (Retailer - Record of execution)
+					await createNotification({
+						recipientRole: 'retailer',
+						senderRole: 'retailer',
+						senderAddress: account || 'Unknown',
+						message: `Batch #${formData.batchNumber} sale successfully recorded.`,
+						type: 'info',
+						batchNumber: formData.batchNumber
+					});
+
+					// 2. Notify Next Participant (Consumer - for verification)
+					await createNotification({
+						recipientRole: 'consumer',
+						senderRole: 'retailer',
+						senderAddress: account || 'Unknown',
+						message: `Your drug batch #${formData.batchNumber} has been delivered and is ready for verification`,
+						type: 'info',
+						batchNumber: formData.batchNumber
+					});
+					console.log('Sale notifications created');
+				} catch (notifErr) {
+					console.error('Failed to create notifications:', notifErr);
+				}
+
+				// Record to local Recent Activities
+				const newTask = {
+					type: 'shipment' as const,
+					title: `Retail Sale: #${formData.batchNumber}`,
+					description: `Sold ${formData.quantitySold} units to ${formData.buyerName}`,
+					status: 'completed' as const,
+					user: 'Retailer',
+					details: `Batch: ${formData.batchNumber} | Invoice: ${formData.invoiceNumber} | TX: ${tx2?.hash?.substring(0, 10)}...`
+				};
+
+				const existingTasks = JSON.parse(localStorage.getItem('pharmaTasks') || '[]');
+				const taskWithId = { ...newTask, id: Date.now().toString(), timestamp: new Date().toISOString() };
+				localStorage.setItem('pharmaTasks', JSON.stringify([taskWithId, ...existingTasks]));
+
+			} catch (syncErr) {
+				console.error('Failed to sync to database:', syncErr);
+				if (!error) setError('Blockchain interaction had issues and database sync failed. Please check backend connection.');
+			}
 
 			setIsSubmitting(false);
 			setSubmitted(true);
@@ -134,28 +244,36 @@ const RetailerForm: React.FC = () => {
 					<div>
 						<label className="block text-sm mb-2">Invoice Number *</label>
 						<input name="invoiceNumber" value={formData.invoiceNumber} onChange={handleChange} required className="w-full bg-[#0d0d0d] border border-[rgba(34,197,94,0.25)] rounded-md px-3 py-2 focus:border-brand-green" />
+						{fieldErrors.invoiceNumber && <p className="text-red-500 text-xs mt-1">{fieldErrors.invoiceNumber}</p>}
 					</div>
 					<div>
 						<label className="block text-sm mb-2">Batch Number *</label>
 						<input name="batchNumber" value={formData.batchNumber} onChange={handleChange} required className="w-full bg-[#0d0d0d] border border-[rgba(34,197,94,0.25)] rounded-md px-3 py-2 focus:border-brand-green" />
+						{fieldErrors.batchNumber && <p className="text-red-500 text-xs mt-1">{fieldErrors.batchNumber}</p>}
 					</div>
 				</div>
 				<div className="grid md:grid-cols-2 gap-6">
 					<div>
 						<label className="block text-sm mb-2">Quantity Sold *</label>
 						<input type="number" name="quantitySold" value={formData.quantitySold} onChange={handleChange} required className="w-full bg-[#0d0d0d] border border-[rgba(34,197,94,0.25)] rounded-md px-3 py-2 focus:border-brand-green" />
+						{fieldErrors.quantitySold && <p className="text-red-500 text-xs mt-1">{fieldErrors.quantitySold}</p>}
 					</div>
 					<div>
 						<label className="block text-sm mb-2">Buyer Name *</label>
 						<input name="buyerName" value={formData.buyerName} onChange={handleChange} required className="w-full bg-[#0d0d0d] border border-[rgba(34,197,94,0.25)] rounded-md px-3 py-2 focus:border-brand-green" />
+						{fieldErrors.buyerName && <p className="text-red-500 text-xs mt-1">{fieldErrors.buyerName}</p>}
 					</div>
 				</div>
 				<div>
 					<label className="block text-sm mb-2">Sale Date *</label>
 					<input type="date" name="saleDate" value={formData.saleDate} onChange={handleChange} required className="w-full bg-[#0d0d0d] border border-[rgba(34,197,94,0.25)] rounded-md px-3 py-2 focus:border-brand-green" />
+					{fieldErrors.saleDate && <p className="text-red-500 text-xs mt-1">{fieldErrors.saleDate}</p>}
 				</div>
 				<button type="submit" disabled={isSubmitting} className="w-full bg-brand-green text-black rounded-md py-3 font-semibold hover:brightness-110 disabled:opacity-50">{isSubmitting ? 'Saving...' : 'Save Retail Sale'}</button>
 			</form>
+
+			{/* Deliver confirmation for incoming shipments */}
+			<ConfirmDelivery role="retailer" />
 		</div>
 	);
 };

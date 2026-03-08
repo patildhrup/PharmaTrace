@@ -5,7 +5,7 @@
 // Default to localhost deployment address
 // After deploying with: npx hardhat ignition deploy ignition/modules/deploy.js --network localhost
 // Update this with the actual deployed address
-export const CONTRACT_ADDRESS = process.env.REACT_APP_CONTRACT_ADDRESS || '0x5FbDB2315678afecb367f032d93F642f64180aa3';
+export const CONTRACT_ADDRESS = process.env.REACT_APP_CONTRACT_ADDRESS || '0x09635F643e140090A9A8Dcd712eD6285858ceBef';
 
 // Network configuration
 export const NETWORK_CONFIG = {

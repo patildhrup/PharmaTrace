@@ -1,15 +1,25 @@
 require('dotenv').config();
 const express = require('express');
+const cors = require('cors');
 const connectDB = require('./app/config/db');
+const productRoutes = require('./app/routes/productRoutes');
+const notificationRoutes = require('./app/routes/notificationRoutes');
 
 const app = express();
 
 // Connect to Database
 connectDB();
 
+// Middleware
+app.use(cors());
 app.use(express.json());
 
-const PORT = process.env.PORT || 3000;
+// Routes
+app.use('/api/products', productRoutes);
+app.use('/api/notifications', notificationRoutes);
+app.get('/api/health', (req, res) => res.json({ status: 'OK' }));
+
+const PORT = process.env.PORT || 5000;
 
 app.get('/', (req, res) => {
     res.send('API is running...');

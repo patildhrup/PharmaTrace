@@ -56,13 +56,13 @@ const RecentTasks: React.FC = () => {
 		for (let i = 0; i < updatedTasks.length; i++) {
 			const task = updatedTasks[i];
 			const batchNumber = extractBatchNumber(task.description) || extractBatchNumber(task.details);
-			
+
 			if (batchNumber) {
 				try {
 					const productId = ethers.id(batchNumber);
 					const [name, holder, stage, updatesCount] = await activeContract.getProduct(productId);
 					const currentStage = Number(stage);
-					
+
 					let newStatus: 'completed' | 'in_progress' | 'pending' = task.status;
 					let statusText = '';
 
@@ -113,8 +113,13 @@ const RecentTasks: React.FC = () => {
 						}
 						changed = true;
 					}
-				} catch (err) {
-					console.error(`Error updating status for batch ${batchNumber}:`, err);
+				} catch (err: any) {
+					// Suppress BAD_DATA errors which happen when contract is not deployed or node restarted
+					if (err.code === 'BAD_DATA' || err.message?.includes('could not decode result data')) {
+						console.warn(`Could not fetch status for batch ${batchNumber} (Blockchain reset?)`);
+					} else {
+						console.error(`Error updating status for batch ${batchNumber}:`, err);
+					}
 				}
 			}
 		}
@@ -165,7 +170,7 @@ const RecentTasks: React.FC = () => {
 		}
 	};
 
-	const filteredTasks = tasks.filter(task => 
+	const filteredTasks = tasks.filter(task =>
 		filter === 'all' || task.status === filter
 	);
 
@@ -207,17 +212,16 @@ const RecentTasks: React.FC = () => {
 						)}
 					</div>
 				</div>
-				
+
 				<div className="flex space-x-2">
 					{['all', 'completed', 'in_progress', 'pending'].map((status) => (
 						<button
 							key={status}
 							onClick={() => setFilter(status as any)}
-							className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-300 hover-scale ${
-								filter === status
+							className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-300 hover-scale ${filter === status
 									? 'bg-brand-green text-black'
 									: 'bg-white/10 text-white/70 hover:bg-white/20'
-							}`}
+								}`}
 						>
 							{status.charAt(0).toUpperCase() + status.slice(1)}
 						</button>
@@ -230,8 +234,8 @@ const RecentTasks: React.FC = () => {
 					<div className="w-20 h-20 bg-gradient-to-br from-brand-green/20 to-brand-blue/20 rounded-full flex items-center justify-center mx-auto mb-4 animation-float">
 						<span className="text-4xl">📝</span>
 					</div>
-					<h3 className="text-xl font-semibold mb-2" style={{color: 'var(--text-primary)'}}>No Activities Yet</h3>
-					<p style={{color: 'var(--text-secondary)'}}>Start by adding raw materials or creating drug batches to see activities here.</p>
+					<h3 className="text-xl font-semibold mb-2" style={{ color: 'var(--text-primary)' }}>No Activities Yet</h3>
+					<p style={{ color: 'var(--text-secondary)' }}>Start by adding raw materials or creating drug batches to see activities here.</p>
 				</div>
 			) : (
 				<div className="space-y-4">
@@ -251,24 +255,24 @@ const RecentTasks: React.FC = () => {
 									</div>
 									<div className="flex-1">
 										<div className="flex items-center space-x-3 mb-2">
-											<h3 className="text-lg font-semibold group-hover:text-brand-green transition-colors duration-300" style={{color: 'var(--text-primary)'}}>
+											<h3 className="text-lg font-semibold group-hover:text-brand-green transition-colors duration-300" style={{ color: 'var(--text-primary)' }}>
 												{task.title}
 											</h3>
 											<span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(task.status)} bg-current/20`}>
 												{task.status.replace('_', ' ')}
 											</span>
 										</div>
-										<p className="mb-2" style={{color: 'var(--text-secondary)'}}>{task.description}</p>
+										<p className="mb-2" style={{ color: 'var(--text-secondary)' }}>{task.description}</p>
 										{task.details && (
 											<p className="text-brand-green text-sm font-medium">{task.details}</p>
 										)}
-										<div className="flex items-center space-x-4 mt-3 text-sm" style={{color: 'var(--text-secondary)'}}>
+										<div className="flex items-center space-x-4 mt-3 text-sm" style={{ color: 'var(--text-secondary)' }}>
 											<span>👤 {task.user}</span>
 											<span>🕒 {task.timestamp.toLocaleString()}</span>
 										</div>
 									</div>
 								</div>
-								
+
 								<div className="flex items-center space-x-2">
 									{hasBatchNumber(task) && (
 										<button
@@ -296,7 +300,7 @@ const RecentTasks: React.FC = () => {
 			{/* QR Code Modal */}
 			{showQRModal && (
 				<div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" onClick={() => setShowQRModal(null)}>
-					<div 
+					<div
 						className="bg-[#111] border border-[rgba(34,197,94,0.3)] rounded-xl p-8 max-w-md w-full animation-fadeInUp"
 						onClick={(e) => e.stopPropagation()}
 					>
@@ -311,7 +315,7 @@ const RecentTasks: React.FC = () => {
 								</svg>
 							</button>
 						</div>
-						
+
 						<div className="text-center mb-4">
 							<p className="text-white/70 text-sm mb-2">{showQRModal.taskTitle}</p>
 							<p className="text-white/50 text-xs">Batch: <span className="text-brand-green font-semibold">{showQRModal.batchNumber}</span></p>
@@ -319,12 +323,12 @@ const RecentTasks: React.FC = () => {
 
 						<div className="flex flex-col items-center mb-6">
 							<div className="bg-white p-4 rounded-lg mb-4">
-							<QRCodeSVG 
-								value={`${window.location.origin}/verify/${encodeURIComponent(showQRModal.batchNumber)}`}
-								size={200}
-								level="H"
-								includeMargin={true}
-							/>
+								<QRCodeSVG
+									value={`${window.location.origin}/verify/${encodeURIComponent(showQRModal.batchNumber)}`}
+									size={200}
+									level="H"
+									includeMargin={true}
+								/>
 							</div>
 							<p className="text-white/50 text-xs break-all max-w-sm text-center">
 								{window.location.origin}/verify/{encodeURIComponent(showQRModal.batchNumber)}

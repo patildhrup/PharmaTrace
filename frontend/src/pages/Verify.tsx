@@ -21,6 +21,30 @@ interface ProductInfo {
 	manufacturerName?: string;
 	licenseNumber?: string;
 	qualityGrade?: string;
+	// Supplier details
+	supplierName?: string;
+	supplyDate?: string;
+	source?: string;
+	qualityCertificate?: string;
+	storageConditions?: string;
+	contactPerson?: string;
+	phoneNumber?: string;
+	// Distributor details
+	dispatchDate?: string;
+	packages?: string;
+	carrier?: string;
+	// Retailer details
+	invoiceNumber?: string;
+	quantitySold?: string;
+	// Logistics details
+	vehicleId?: string;
+	pickedUpFrom?: string;
+	deliveredTo?: string;
+	buyerName?: string;
+	saleDate?: string;
+	destinationCenter?: string;
+	pickupLocation?: string;
+	dropLocation?: string;
 }
 
 interface UpdateInfo {
@@ -108,7 +132,29 @@ const Verify: React.FC = () => {
 						ingredients: dbProduct.ingredients,
 						manufacturerName: dbProduct.manufacturerName,
 						licenseNumber: dbProduct.licenseNumber,
-						qualityGrade: dbProduct.qualityGrade
+						qualityGrade: dbProduct.qualityGrade,
+						// Supplier details
+						supplierName: dbProduct.supplierName,
+						supplyDate: dbProduct.supplyDate,
+						source: dbProduct.source,
+						qualityCertificate: dbProduct.qualityCertificate,
+						storageConditions: dbProduct.storageConditions,
+						contactPerson: dbProduct.contactPerson,
+						phoneNumber: dbProduct.phoneNumber,
+						// Distributor details
+						destinationCenter: dbProduct.destinationCenter,
+						dispatchDate: dbProduct.dispatchDate,
+						packages: dbProduct.packages,
+						carrier: dbProduct.carrier,
+						// Retailer details
+						invoiceNumber: dbProduct.invoiceNumber,
+						buyerName: dbProduct.buyerName,
+						saleDate: dbProduct.saleDate,
+						quantitySold: dbProduct.quantitySold,
+						// Logistics details from database
+						vehicleId: dbProduct.vehicleId,
+						pickedUpFrom: dbProduct.pickedUpFrom,
+						deliveredTo: dbProduct.deliveredTo
 					});
 
 					// Convert history from database format
@@ -326,14 +372,6 @@ const Verify: React.FC = () => {
 					</div>
 				)}
 
-				{dataSource && (
-					<div className="mb-6 p-4 bg-blue-500/20 border border-blue-500 rounded-xl">
-						<p className="text-blue-500 text-sm">
-							📊 Data source: <span className="font-semibold">{dataSource === 'database' ? 'Database (MongoDB)' : 'Blockchain'}</span>
-							{dataSource === 'blockchain' && apiAvailable && <span className="ml-2 text-xs">(Syncing to database...)</span>}
-						</p>
-					</div>
-				)}
 
 				{error && (
 					<div className="mb-6 p-4 bg-red-500/20 border border-red-500 rounded-xl">
@@ -444,7 +482,7 @@ const Verify: React.FC = () => {
 								</div>
 								<div>
 									<p className="text-white font-semibold">Immutable Blockchain Proof</p>
-									<p className="text-white/50 text-xs">Verified via Smart Contract at {contract?.target?.toString().substring(0, 10)}...</p>
+									<p className="text-white/50 text-xs">Verified via Smart Contract</p>
 								</div>
 							</div>
 							<div className="text-right">
@@ -503,6 +541,117 @@ const Verify: React.FC = () => {
 										<div className="md:col-span-2">
 											<p className="text-white/70 text-sm">Active Ingredients</p>
 											<p className="text-white font-semibold text-sm">{productInfo.ingredients}</p>
+										</div>
+									)}
+								</div>
+							</div>
+						)}
+
+						{/* Supplier Details Card */}
+						{(productInfo.supplierName || productInfo.source) && (
+							<div className="bg-gradient-to-br from-[#111] to-[#0d0d0d] border border-orange-500/30 rounded-xl p-6">
+								<h3 className="text-xl font-bold text-orange-400 mb-4">🏭 Raw Material Source</h3>
+								<div className="grid md:grid-cols-2 gap-4">
+									{productInfo.supplierName && (
+										<div>
+											<p className="text-white/70 text-sm">Supplier</p>
+											<p className="text-white font-semibold">{productInfo.supplierName}</p>
+										</div>
+									)}
+									{productInfo.source && (
+										<div>
+											<p className="text-white/70 text-sm">Origin</p>
+											<p className="text-white font-semibold">{productInfo.source}</p>
+										</div>
+									)}
+									{productInfo.supplyDate && (
+										<div>
+											<p className="text-white/70 text-sm">Supply Date</p>
+											<p className="text-white font-semibold">{productInfo.supplyDate}</p>
+										</div>
+									)}
+									{productInfo.qualityCertificate && (
+										<div>
+											<p className="text-white/70 text-sm">QC Certificate</p>
+											<p className="text-white font-semibold text-xs">{productInfo.qualityCertificate}</p>
+										</div>
+									)}
+								</div>
+							</div>
+						)}
+
+						{/* Logistics & Distribution Card */}
+						{(productInfo.vehicleId || productInfo.deliveredTo || productInfo.destinationCenter || productInfo.carrier) && (
+							<div className="bg-gradient-to-br from-[#111] to-[#0d0d0d] border border-blue-500/30 rounded-xl p-6">
+								<h3 className="text-xl font-bold text-blue-400 mb-4">🚚 Logistics & Distribution</h3>
+								<div className="grid md:grid-cols-2 gap-4">
+									{productInfo.vehicleId && (
+										<div>
+											<p className="text-white/70 text-sm">Last Vehicle ID</p>
+											<p className="text-white font-semibold">{productInfo.vehicleId}</p>
+										</div>
+									)}
+									{productInfo.carrier && (
+										<div>
+											<p className="text-white/70 text-sm">Carrier</p>
+											<p className="text-white font-semibold">{productInfo.carrier}</p>
+										</div>
+									)}
+									{productInfo.pickedUpFrom && (
+										<div>
+											<p className="text-white/70 text-sm">Picked Up From</p>
+											<p className="text-white font-semibold">{productInfo.pickedUpFrom}</p>
+										</div>
+									)}
+									{productInfo.deliveredTo && (
+										<div>
+											<p className="text-white/70 text-sm">Delivered To</p>
+											<p className="text-white font-semibold">{productInfo.deliveredTo}</p>
+										</div>
+									)}
+									{productInfo.destinationCenter && (
+										<div>
+											<p className="text-white/70 text-sm">Destination Center</p>
+											<p className="text-white font-semibold">{productInfo.destinationCenter}</p>
+										</div>
+									)}
+									{productInfo.packages && (
+										<div>
+											<p className="text-white/70 text-sm">Packages</p>
+											<p className="text-white font-semibold">{productInfo.packages}</p>
+										</div>
+									)}
+								</div>
+							</div>
+						)}
+
+						{/* Retail Sale Card */}
+						{(productInfo.buyerName || productInfo.invoiceNumber) && (
+							<div className="bg-gradient-to-br from-[#111] to-[#0d0d0d] border border-purple-500/30 rounded-xl p-6">
+								<h3 className="text-xl font-bold text-purple-400 mb-4">🏥 Retail Sale Information</h3>
+								<div className="grid md:grid-cols-2 gap-4">
+									{productInfo.buyerName && (
+										<div>
+											<p className="text-white/70 text-sm">Sold To</p>
+											<p className="text-white font-semibold">{productInfo.buyerName}</p>
+										</div>
+									)}
+									{productInfo.saleDate && (
+										<div>
+											<p className="text-white/70 text-sm">Sale Date</p>
+											<p className="text-white font-semibold">{productInfo.saleDate}</p>
+										</div>
+									)}
+									{productInfo.invoiceNumber && (
+										<div>
+											<p className="text-white/70 text-sm">Invoice Number</p>
+											<p className="text-white font-semibold">{productInfo.invoiceNumber}</p>
+										</div>
+									)}
+									{productInfo.quantitySold && (
+										<div>
+											<p className="text-white/70 text-sm">Quantity Sold</p>
+											<p className="text-white font-semibold">{productInfo.quantitySold}</p>
 										</div>
 									)}
 								</div>

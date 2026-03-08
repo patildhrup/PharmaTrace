@@ -3,14 +3,29 @@ import { ethers } from 'ethers';
 import contractABI from '../config/contractABI.json';
 import { CONTRACT_ADDRESS } from '../config/contractConfig';
 
+// =====================================================
+// Role → MetaMask Account Mapping
+// Addresses derived from the test private keys
+// =====================================================
+export const ROLE_ACCOUNTS: Record<string, string> = {
+	supplier: '0x9965507D1a55bcC2695C58ba16FB37d819B0A4dc',
+	manufacturer: '0x976EA74026E726554dB657fA54763abd0C3a0aa9',
+	transport: '0x14dC79964da2C08b23698B3D3cc7Ca32193d9955',
+	retailer: '0x23618e81E3f5cdF7f54C3d65f7FBc0aBf5B21E8f',
+	distributor: '0xa0Ee7A142d267C1f36714E4a8F75612F20a79720',
+};
+
 interface Web3ContextType {
 	account: string | null;
 	provider: ethers.BrowserProvider | null;
 	contract: ethers.Contract | null;
 	isConnected: boolean;
 	connectWallet: () => Promise<void>;
+	connectWalletForRole: (role: string) => Promise<void>;
 	disconnectWallet: () => void;
 	error: string | null;
+	expectedAddress: string | null;
+	addressMismatch: boolean;
 }
 
 const Web3Context = createContext<Web3ContextType | undefined>(undefined);
@@ -33,6 +48,8 @@ export const Web3Provider: React.FC<Web3ProviderProps> = ({ children }) => {
 	const [contract, setContract] = useState<ethers.Contract | null>(null);
 	const [isConnected, setIsConnected] = useState(false);
 	const [error, setError] = useState<string | null>(null);
+	const [expectedAddress, setExpectedAddress] = useState<string | null>(null);
+	const [addressMismatch, setAddressMismatch] = useState(false);
 
 	const disconnectWallet = useCallback(() => {
 		setAccount(null);
@@ -40,6 +57,8 @@ export const Web3Provider: React.FC<Web3ProviderProps> = ({ children }) => {
 		setContract(null);
 		setIsConnected(false);
 		setError(null);
+		setExpectedAddress(null);
+		setAddressMismatch(false);
 	}, []);
 
 	const setupProvider = useCallback(async (provider: ethers.BrowserProvider, accountAddress: string) => {
@@ -138,7 +157,16 @@ export const Web3Provider: React.FC<Web3ProviderProps> = ({ children }) => {
 		if (accounts.length === 0) {
 			disconnectWallet();
 		} else {
-			setAccount(accounts[0]);
+			const newAccount = accounts[0];
+			setAccount(newAccount);
+
+			// Check if switched account matches expected role address
+			setExpectedAddress(prev => {
+				if (prev) {
+					setAddressMismatch(newAccount.toLowerCase() !== prev.toLowerCase());
+				}
+				return prev;
+			});
 		}
 	}, [disconnectWallet]);
 
@@ -182,6 +210,57 @@ export const Web3Provider: React.FC<Web3ProviderProps> = ({ children }) => {
 		}
 	}, [setupProvider]);
 
+	/**
+	 * Connect wallet for a specific role.
+	 * Uses wallet_requestPermissions to let the user pick an account,
+	 * then validates it matches the expected role address.
+	 */
+	const connectWalletForRole = useCallback(async (role: string) => {
+		try {
+			setError(null);
+			setAddressMismatch(false);
+
+			if (!window.ethereum) {
+				throw new Error('MetaMask is not installed. Please install MetaMask to continue.');
+			}
+
+			const roleExpectedAddress = ROLE_ACCOUNTS[role];
+			if (roleExpectedAddress) {
+				setExpectedAddress(roleExpectedAddress);
+			}
+
+			// Prompt user to pick an account — they must select the correct role account
+			await window.ethereum.request({
+				method: 'wallet_requestPermissions',
+				params: [{ eth_accounts: {} }],
+			});
+
+			const web3Provider = new ethers.BrowserProvider(window.ethereum);
+			const accounts = await web3Provider.send('eth_accounts', []);
+
+			if (!accounts || accounts.length === 0) {
+				throw new Error('No account selected. Please select an account in MetaMask.');
+			}
+
+			const selectedAccount: string = accounts[0];
+
+			// Validate the selected account matches the expected role address
+			if (roleExpectedAddress && selectedAccount.toLowerCase() !== roleExpectedAddress.toLowerCase()) {
+				setAddressMismatch(true);
+				throw new Error(
+					`Wrong account selected.\n\nExpected: ${roleExpectedAddress}\nSelected: ${selectedAccount}\n\nPlease reopen MetaMask and select the correct account for the ${role} role.`
+				);
+			}
+
+			setAddressMismatch(false);
+			await setupProvider(web3Provider, selectedAccount);
+		} catch (err: any) {
+			console.error('Error connecting wallet for role:', err);
+			setError(err.message || 'Failed to connect wallet');
+			throw err;
+		}
+	}, [setupProvider]);
+
 	return (
 		<Web3Context.Provider
 			value={{
@@ -190,8 +269,11 @@ export const Web3Provider: React.FC<Web3ProviderProps> = ({ children }) => {
 				contract,
 				isConnected,
 				connectWallet,
+				connectWalletForRole,
 				disconnectWallet,
 				error,
+				expectedAddress,
+				addressMismatch,
 			}}
 		>
 			{children}
@@ -205,4 +287,3 @@ declare global {
 		ethereum?: any;
 	}
 }
-
