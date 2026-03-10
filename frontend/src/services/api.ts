@@ -178,6 +178,22 @@ export const getRecentGlobalActivities = async (): Promise<any[]> => {
   return response.json();
 };
 
+// Role-specific Stats Dashboard Data
+export const getRoleStats = async (role: string, address: string): Promise<any> => {
+  if (!role || !address) return { stats: [] };
+  const response = await fetch(`${API_BASE_URL}/products/role-stats/${encodeURIComponent(role)}/${encodeURIComponent(address)}`);
+  if (!response.ok) return { stats: [] };
+  return response.json();
+};
+
+// Role-specific Recent Activities Dashboard Data
+export const getRoleActivities = async (role: string, address: string): Promise<any> => {
+  if (!role || !address) return { activities: [] };
+  const response = await fetch(`${API_BASE_URL}/products/role-activities/${encodeURIComponent(role)}/${encodeURIComponent(address)}`);
+  if (!response.ok) return { activities: [] };
+  return response.json();
+};
+
 // Health check
 export const checkApiHealth = async (): Promise<boolean> => {
   try {
@@ -186,4 +202,20 @@ export const checkApiHealth = async (): Promise<boolean> => {
   } catch {
     return false;
   }
+};
+
+// Chatbot functionality
+export const sendChatMessage = async (message: string, history: any[] = []): Promise<string> => {
+  const response = await fetch(`${API_BASE_URL}/chat`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ message, history }),
+  });
+  if (!response.ok) {
+    throw new Error('Failed to send chat message');
+  }
+  const data = await response.json();
+  return data.reply || 'No response';
 };

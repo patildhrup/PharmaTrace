@@ -128,6 +128,7 @@ const RetailerForm: React.FC = () => {
 					batchNumber: formData.batchNumber,
 					productId: productId,
 					name,
+					userAddress: account || '',
 					currentHolder: holder,
 					stage: stage,
 					history: historyArray,

@@ -3,6 +3,7 @@ const mongoose = require('mongoose');
 const supplierLogSchema = new mongoose.Schema({
     batchNumber: { type: String, required: true },
     productId: { type: String, required: true },
+    userAddress: { type: String, index: true }, // wallet address of the submitter
     materialName: { type: String, required: true },
     supplierName: { type: String, required: true },
     supplyDate: { type: String, required: true },

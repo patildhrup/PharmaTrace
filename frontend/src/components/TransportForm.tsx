@@ -163,6 +163,7 @@ const TransportForm: React.FC<TransportProps> = ({ prefilledBatch, prefilledLoca
 					batchNumber: formData.batchNumber,
 					productId: productId,
 					name,
+					userAddress: account || '',
 					currentHolder: holder,
 					stage: stage,
 					history: historyArray,

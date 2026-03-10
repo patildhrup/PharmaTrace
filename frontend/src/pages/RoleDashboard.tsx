@@ -11,6 +11,7 @@ import RetailerForm from '../components/RetailerForm';
 import ConsumerForm from '../components/ConsumerForm';
 import RecentTasks from '../components/RecentTasks';
 import NotificationPanel from '../components/NotificationPanel';
+import { getRoleStats, getRoleActivities } from '../services/api';
 
 interface RoleData {
 	id: string;
@@ -34,6 +35,7 @@ const RoleDashboard: React.FC = () => {
 	const [prefillBatch, setPrefillBatch] = useState<string | null>(null);
 	const [prefillLocation, setPrefillLocation] = useState<string | null>(null);
 	const [prefillEntity, setPrefillEntity] = useState<string | null>(null);
+	const [isLoading, setIsLoading] = useState(true);
 
 	const handleAcceptPickup = (batch: string, location: string, entity: string) => {
 		setPrefillBatch(batch);
@@ -75,92 +77,75 @@ const RoleDashboard: React.FC = () => {
 			return;
 		}
 
-		// Mock data for different roles
-		const roleDataMap: Record<string, RoleData> = {
-			supplier: {
-				id: 'supplier',
-				name: 'Supplier Dashboard',
-				icon: '🏭',
-				color: 'from-blue-500 to-blue-600',
-				stats: [
-					{ label: 'Active Suppliers', value: '45', change: '+12%' },
-					{ label: 'Materials Supplied', value: '1,234', change: '+8%' },
-					{ label: 'Quality Score', value: '98.5%', change: '+2.1%' },
-					{ label: 'Pending Orders', value: '23', change: '-5%' }
-				],
-				recentActivities: []
-			},
-			manufacturer: {
-				id: 'manufacturer',
-				name: 'Manufacturer Dashboard',
-				icon: '⚗️',
-				color: 'from-purple-500 to-purple-600',
-				stats: [
-					{ label: 'Production Lines', value: '12', change: '+2' },
-					{ label: 'Drugs Manufactured', value: '5,678', change: '+15%' },
-					{ label: 'Quality Compliance', value: '99.2%', change: '+0.8%' },
-					{ label: 'Batch Failures', value: '3', change: '-67%' }
-				],
-				recentActivities: []
-			},
-			distributor: {
-				id: 'distributor',
-				name: 'Distributor Dashboard',
-				icon: '📦',
-				color: 'from-orange-500 to-orange-600',
-				stats: [
-					{ label: 'Distribution Centers', value: '8', change: '+1' },
-					{ label: 'Packages Distributed', value: '12,345', change: '+22%' },
-					{ label: 'Delivery Success Rate', value: '97.8%', change: '+1.2%' },
-					{ label: 'Pending Shipments', value: '156', change: '-12%' }
-				],
-				recentActivities: []
-			},
-			transport: {
-				id: 'transport',
-				name: 'Transport Dashboard',
-				icon: '🚚',
-				color: 'from-yellow-500 to-yellow-600',
-				stats: [
-					{ label: 'Active Vehicles', value: '24', change: '+3' },
-					{ label: 'Deliveries Today', value: '89', change: '+18%' },
-					{ label: 'On-Time Delivery', value: '94.5%', change: '+2.1%' },
-					{ label: 'Temperature Violations', value: '2', change: '-50%' }
-				],
-				recentActivities: []
-			},
-			retailer: {
-				id: 'retailer',
-				name: 'Retailer Dashboard',
-				icon: '🏥',
-				color: 'from-green-500 to-green-600',
-				stats: [
-					{ label: 'Registered Pharmacies', value: '156', change: '+8' },
-					{ label: 'Drugs Sold Today', value: '2,345', change: '+12%' },
-					{ label: 'Customer Satisfaction', value: '96.8%', change: '+1.5%' },
-					{ label: 'Expired Drugs', value: '12', change: '-25%' }
-				],
-				recentActivities: []
-			},
-			consumer: {
-				id: 'consumer',
-				name: 'Consumer Dashboard',
-				icon: '🧑\u200d⚕️',
-				color: 'from-emerald-500 to-teal-600',
-				stats: [
-					{ label: 'Scans Performed', value: '89', change: '+14%' },
-					{ label: 'Authenticity Verified', value: '100%', change: '0%' },
-					{ label: 'Alerts Received', value: '0', change: '0' },
-					{ label: 'Batches Viewed', value: '72', change: '+8%' }
-				],
-				recentActivities: []
+		const fetchRoleData = async () => {
+			setIsLoading(true);
+
+			// Base configurations for roles
+			const baseConfig: Record<string, Partial<RoleData>> = {
+				supplier: { id: 'supplier', name: 'Supplier Dashboard', icon: '🏭', color: 'from-blue-500 to-blue-600' },
+				manufacturer: { id: 'manufacturer', name: 'Manufacturer Dashboard', icon: '⚗️', color: 'from-purple-500 to-purple-600' },
+				distributor: { id: 'distributor', name: 'Distributor Dashboard', icon: '📦', color: 'from-orange-500 to-orange-600' },
+				transport: { id: 'transport', name: 'Transport Dashboard', icon: '🚚', color: 'from-yellow-500 to-yellow-600' },
+				retailer: { id: 'retailer', name: 'Retailer Dashboard', icon: '🏥', color: 'from-green-500 to-green-600' },
+				consumer: { id: 'consumer', name: 'Consumer Dashboard', icon: '🧑\u200d⚕️', color: 'from-emerald-500 to-teal-600' }
+			};
+
+			const config = baseConfig[roleId || ''];
+			if (!config) {
+				setIsLoading(false);
+				return;
+			}
+
+			try {
+				let stats = [];
+				let recentActivities = [];
+
+				if (account && roleId) {
+					const statsResponse = await getRoleStats(roleId, account);
+					const activitiesResponse = await getRoleActivities(roleId, account);
+
+					stats = statsResponse.stats || [];
+					recentActivities = activitiesResponse.activities || [];
+				}
+
+				// Fallback stats if API fails or no account
+				if (stats.length === 0) {
+					stats = [
+						{ label: 'Active Tasks', value: '0', change: '0%' },
+						{ label: 'Items Processed', value: '0', change: '0%' },
+						{ label: 'Success Rate', value: '0%', change: '0%' },
+						{ label: 'Pending', value: '0', change: '0' }
+					];
+				}
+
+				setRoleData({
+					...(config as RoleData),
+					stats,
+					recentActivities
+				});
+			} catch (error) {
+				console.error("Failed to fetch dashboard data:", error);
+
+				// Fallback state on error
+				setRoleData({
+					...(config as RoleData),
+					stats: [
+						{ label: 'Data Unavailable', value: '-', change: '' },
+						{ label: 'Please connect', value: '-', change: '' },
+						{ label: 'or switch', value: '-', change: '' },
+						{ label: 'accounts', value: '-', change: '' }
+					],
+					recentActivities: []
+				});
+			} finally {
+				setIsLoading(false);
 			}
 		};
 
-		setRoleData(roleDataMap[roleId || '']);
-	}, [roleId, navigate]);
+		fetchRoleData();
+	}, [roleId, account, navigate]);
 
-	if (!roleData) {
+	if (isLoading || !roleData) {
 		return <div className="min-h-screen flex items-center justify-center transition-colors duration-300" style={{
 			backgroundColor: 'var(--bg-primary)',
 			color: 'var(--text-primary)'

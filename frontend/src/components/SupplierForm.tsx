@@ -156,6 +156,7 @@ const SupplierForm: React.FC = () => {
 					batchNumber: formData.batchNumber,
 					productId: productId,
 					name: name,
+					userAddress: account || '',
 					currentHolder: holder,
 					stage: stage,
 					history: historyArray,

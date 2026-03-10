@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from "framer-motion";
-import { MessageCircle, X, Send, Mic, Bot, User } from "lucide-react";
+import { MessageCircle, X, Send, Mic, Bot, User, Loader2 } from "lucide-react";
+import { sendChatMessage } from '../services/api';
 
 interface Message {
     id: string;
@@ -20,6 +21,7 @@ const Chatbot: React.FC = () => {
         }
     ]);
     const [inputValue, setInputValue] = useState('');
+    const [isLoading, setIsLoading] = useState(false);
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
     const scrollToBottom = () => {
@@ -32,28 +34,43 @@ const Chatbot: React.FC = () => {
         }
     }, [messages, isOpen]);
 
-    const handleSend = () => {
-        if (!inputValue.trim()) return;
+    const handleSend = async () => {
+        if (!inputValue.trim() || isLoading) return;
 
+        const userText = inputValue;
         const userMessage: Message = {
             id: Date.now().toString(),
-            text: inputValue,
+            text: userText,
             sender: 'user',
             timestamp: new Date()
         };
 
         setMessages(prev => [...prev, userMessage]);
         setInputValue('');
+        setIsLoading(true);
 
-        setTimeout(() => {
+        try {
+            const reply = await sendChatMessage(userText, messages);
+
             const botMessage: Message = {
                 id: (Date.now() + 1).toString(),
-                text: "",
+                text: reply,
                 sender: 'bot',
                 timestamp: new Date()
             };
             setMessages(prev => [...prev, botMessage]);
-        }, 1000);
+        } catch (error) {
+            console.error('Chat error:', error);
+            const errorMessage: Message = {
+                id: (Date.now() + 1).toString(),
+                text: "Sorry, I encountered an error while processing your request.",
+                sender: 'bot',
+                timestamp: new Date()
+            };
+            setMessages(prev => [...prev, errorMessage]);
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     // Keep the "Enter" key handler responsive
@@ -139,7 +156,7 @@ const Chatbot: React.FC = () => {
                                                 ? 'bg-gradient-to-r from-red-500 to-orange-500 text-white rounded-tr-none shadow-md'
                                                 : 'bg-white dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200 rounded-tl-none border border-zinc-200 dark:border-zinc-700 shadow-sm'
                                                 }`}>
-                                                {msg.text}
+                                                <div className="whitespace-pre-wrap">{msg.text}</div>
                                                 <div className={`text-[10px] mt-1 ${msg.sender === 'user' ? 'text-white/70' : 'text-zinc-500 dark:text-zinc-400'}`}>
                                                     {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                                 </div>
@@ -147,6 +164,21 @@ const Chatbot: React.FC = () => {
                                         </div>
                                     </div>
                                 ))}
+                                {isLoading && (
+                                    <div className="flex justify-start">
+                                        <div className="flex gap-2 max-w-[85%] flex-row">
+                                            <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 bg-gradient-to-tr from-yellow-400 to-purple-600 p-[2px]">
+                                                <div className="w-full h-full rounded-full bg-[#111] overflow-hidden flex items-center justify-center">
+                                                    <span className="text-sm">🤖</span>
+                                                </div>
+                                            </div>
+                                            <div className="p-3 bg-white dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200 rounded-tl-none rounded-2xl border border-zinc-200 dark:border-zinc-700 shadow-sm flex items-center">
+                                                <Loader2 className="w-4 h-4 animate-spin text-brand-green mr-2" />
+                                                <span className="text-sm">Thinking...</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
                                 <div ref={messagesEndRef} />
                             </div>
 
@@ -160,8 +192,9 @@ const Chatbot: React.FC = () => {
                                             value={inputValue}
                                             onChange={(e) => setInputValue(e.target.value)}
                                             onKeyDown={handleKeyDown}
+                                            disabled={isLoading}
                                             placeholder="Ask me anything..."
-                                            className="w-full pl-12 pr-24 py-3 bg-white dark:bg-[#111] border-none rounded-full outline-none text-zinc-700 dark:text-zinc-200 placeholder-zinc-400 transition-all focus:ring-0"
+                                            className="w-full pl-12 pr-24 py-3 bg-white dark:bg-[#111] border-none rounded-full outline-none text-zinc-700 dark:text-zinc-200 placeholder-zinc-400 transition-all focus:ring-0 disabled:opacity-50"
                                             autoFocus
                                         />
                                     </div>
